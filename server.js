@@ -9,7 +9,7 @@ import aiRoutes from "./routes/aiRoutes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
-dotenv.config();
+dotenv.config(); 
 
 if (!process.env.JWT_SECRET) {
   throw new Error("Missing required environment variable: JWT_SECRET");
