@@ -14,12 +14,13 @@ const CLOSET_ITEM_TYPES: ClosetItemType[] = [
 ];
 
 interface AddItemModalProps {
+  isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   editItem?: ClosetItem;
 }
 
-const AddItemModal: React.FC<AddItemModalProps> = ({ onClose, onSuccess, editItem }) => {
+const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, onSuccess, editItem }) => {
   const [name, setName] = useState(editItem?.name ?? '');
   const [type, setType] = useState<ClosetItemType>(editItem?.type ?? 'clothes');
   const [brand, setBrand] = useState(editItem?.brand ?? '');
@@ -71,14 +72,17 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ onClose, onSuccess, editIte
     }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.95, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95, y: 20 }}
-      className="modal-content glass"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="modal-content glass w-full max-w-2xl bg-white rounded-3xl p-8 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
       <div className="modal-header">
         <h2>{editItem ? 'Edit Closet Item' : 'Add Closet Item'}</h2>
         <button className="btn-close" onClick={onClose}><X size={24} /></button>
@@ -179,7 +183,8 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ onClose, onSuccess, editIte
           </button>
         </div>
       </form>
-    </motion.div>
+      </motion.div>
+    </div>
   );
 };
 
