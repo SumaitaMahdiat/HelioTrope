@@ -1,0 +1,104 @@
+import React, { createContext, useContext, useState, useEffect } from "react";
+import type { ReactNode } from "react";
+import axios from "axios";
+
+interface User {
+  id: string;
+  email: string;
+  role: string;
+  name: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  login: (email: string, password: string) => Promise<void>;
+  register: (
+    email: string,
+    password: string,
+    role: string,
+    name: string,
+  ) => Promise<void>;
+  logout: () => void;
+  loading: boolean;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+// eslint-disable-next-line react-refresh/only-export-components
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(() => {
+    const stored = localStorage.getItem("user");
+    if (!stored) {
+      return null;
+    }
+
+    try {
+      return JSON.parse(stored) as User;
+    } catch {
+      return null;
+    }
+  });
+  const [loading] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (token) {
+      axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    }
+  }, []);
+
+  const login = async (email: string, password: string, demo = false) => {
+    const url = `http://localhost:5001/api/auth/login${demo ? "?demo=true" : ""}`;
+    const response = await axios.post(url, {
+      email,
+      password,
+    });
+    const { token, user: userData } = response.data;
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(userData));
+    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    setUser(userData);
+  };
+
+  const register = async (
+    email: string,
+    password: string,
+    role: string,
+    name: string,
+  ) => {
+    const response = await axios.post(
+      "http://localhost:5001/api/auth/register",
+      { email, password, role, name },
+    );
+    const { token, user: userData } = response.data;
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(userData));
+    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    setUser(userData);
+  };
+
+  const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    delete axios.defaults.headers.common["Authorization"];
+    setUser(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
