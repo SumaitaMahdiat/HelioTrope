@@ -78,7 +78,9 @@ const Marketplace = () => {
 
       setProducts((prev) => {
         const seen = new Set(prev.map((p) => p.id));
-const uniqueIncoming = listing.products.filter((p: MarketplaceProduct) => !seen.has(p.id));
+        const uniqueIncoming = listing.products.filter(
+          (p: MarketplaceProduct) => !seen.has(p.id),
+        );
 
         return [...prev, ...uniqueIncoming];
       });
@@ -400,7 +402,7 @@ const uniqueIncoming = listing.products.filter((p: MarketplaceProduct) => !seen.
                         {suggestions.bestOutfit.items.map((item, idx) => (
                           <div
                             key={idx}
-                            className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-orange-100"
+                            className="bg-linear-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-orange-100"
                           >
                             <p className="font-semibold text-gray-900">
                               {item.name}
@@ -471,7 +473,7 @@ const uniqueIncoming = listing.products.filter((p: MarketplaceProduct) => !seen.
 
                 {!suggestions.ai && !suggestions.recommendation?.assistant && (
                   <div className="bg-yellow-100 border border-yellow-300 rounded-xl p-4 mt-4">
-                    <p className="text-sm text-yellow-900 font-mono text-xs">
+                    <p className="text-xs text-yellow-900 font-mono">
                       Debug:{" "}
                       {JSON.stringify({
                         outfitCount: suggestions.outfits?.length,
