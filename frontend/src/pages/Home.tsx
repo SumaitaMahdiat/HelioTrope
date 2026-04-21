@@ -1,3 +1,4 @@
+// Landing page - shown after login
 import React from "react";
 import { useAuth } from "../context/AuthContext";
 
@@ -19,12 +20,14 @@ const Home: React.FC = () => {
             .
           </p>
 
+          {/* Under development notice */}
           <div className="glass p-8 rounded-3xl mb-8 max-w-2xl mx-auto">
             <p className="text-gray-700">
               This section is under development. Stay tuned for updates!
             </p>
           </div>
 
+          {/* Info cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
             <div className="glass p-6 rounded-3xl">
               <h3 className="text-xl font-semibold text-gray-800 mb-2">
