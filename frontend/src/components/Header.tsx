@@ -1,10 +1,12 @@
 import { useAuth } from "../context/AuthContext";
-import { LogOut, Sparkles, User } from "lucide-react";
+import { useCart } from "../context/CartContext";
+import { LogOut, Sparkles, ShoppingCart, User } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 
 const Header = () => {
   const { user, logout } = useAuth();
+  const { totalItems } = useCart();
 
   return (
     <motion.header
@@ -14,6 +16,7 @@ const Header = () => {
       style={{ backdropFilter: "blur(20px)" }}
     >
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        {/* Logo and branding */}
         <Link to="/" className="flex items-center gap-3 group">
           <div className="w-12 h-12 bg-linear-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-all">
             <User className="w-6 h-6 text-white" />
@@ -28,17 +31,40 @@ const Header = () => {
           </div>
         </Link>
 
+        {/* User menu - shown when logged in */}
         {user && (
           <div className="flex items-center gap-4">
+            {/* Fashion assistant link (buyers only) */}
             {user.role === "buyer" && (
-              <Link
-                to="/fashion-assistant"
-                className="btn-primary flex items-center gap-2 px-3 py-2 rounded-xl text-sm"
-              >
-                <Sparkles className="w-4 h-4" />
-                Fashion Assistant
-              </Link>
+              <>
+                <Link
+                  to="/marketplace"
+                  className="btn-secondary flex items-center gap-2 px-3 py-2 rounded-xl text-sm"
+                >
+                  Marketplace
+                </Link>
+                <Link
+                  to="/checkout"
+                  className="relative btn-secondary flex items-center gap-2 px-3 py-2 rounded-xl text-sm"
+                >
+                  <ShoppingCart className="w-4 h-4" />
+                  Cart
+                  {totalItems > 0 && (
+                    <span className="ml-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                      {totalItems}
+                    </span>
+                  )}
+                </Link>
+                <Link
+                  to="/fashion-assistant"
+                  className="btn-primary flex items-center gap-2 px-3 py-2 rounded-xl text-sm"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Fashion Assistant
+                </Link>
+              </>
             )}
+            {/* User name and role badge */}
             <div className="flex items-center gap-2 text-sm">
               <User className="w-5 h-5 text-gray-500" />
               <span>{user.name}</span>
@@ -46,6 +72,7 @@ const Header = () => {
                 {user.role}
               </span>
             </div>
+            {/* Logout button */}
             <button
               onClick={logout}
               className="btn-secondary flex items-center gap-2 p-2 rounded-xl hover:bg-white/50 transition-all"
