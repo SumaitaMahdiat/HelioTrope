@@ -1,3 +1,4 @@
+// Buyer's digital closet - view and manage wardrobe items
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Trash2, Edit3, ShoppingBag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -20,10 +21,10 @@ function Closet() {
   const { user } = useAuth();
   const [items, setItems] = useState<ClosetItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedType, setSelectedType] = useState<string | undefined>();
+  const [selectedType, setSelectedType] = useState<string | undefined>(); // Filter by item type
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ClosetItem | null>(null);
-  const [searchText, setSearchText] = useState("");
+  const [searchText, setSearchText] = useState(""); // Search by name, brand, color, or occasion
   const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<{
     isOpen: boolean;
@@ -31,6 +32,7 @@ function Closet() {
     itemName?: string;
   }>({ isOpen: false });
 
+  // Fetch items from API, re-fetch when type filter changes
   const fetchItems = useCallback(async () => {
     try {
       setLoading(true);
@@ -48,6 +50,7 @@ function Closet() {
     fetchItems();
   }, [fetchItems]);
 
+  // Delete item after confirmation
   const handleDeleteConfirm = async () => {
     if (deleteConfirm.itemId) {
       try {
@@ -61,10 +64,12 @@ function Closet() {
     }
   };
 
+  // Show delete confirmation dialog
   const handleDelete = (id: string, name: string) => {
     setDeleteConfirm({ isOpen: true, itemId: id, itemName: name });
   };
 
+  // Filter items by search text across multiple fields
   const filteredItems = items.filter(
     (item) =>
       item.name.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -80,6 +85,7 @@ function Closet() {
   return (
     <div className="min-h-screen p-6 animate-slide-in">
       <div className="max-w-7xl mx-auto">
+        {/* Page title */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -95,6 +101,7 @@ function Closet() {
           <p className="text-sm text-gray-500 mt-2">Welcome, {user?.name}!</p>
         </motion.div>
 
+        {/* Search and filter controls */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -102,6 +109,7 @@ function Closet() {
           className="glass p-8 mb-8"
         >
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between mb-6">
+            {/* Search box */}
             <div className="flex items-center gap-2 flex-1 max-w-md bg-white/70 p-1 rounded-full border border-gray-200 shadow-sm focus-within:ring-2 focus-within:ring-(--primary) transition-all">
               <Search className="w-5 h-5 text-gray-400 ml-3" />
               <input
@@ -112,6 +120,7 @@ function Closet() {
                 className="flex-1 px-3 py-2 bg-transparent focus:outline-none"
               />
             </div>
+            {/* Add item button */}
             <button
               onClick={() => setIsModalOpen(true)}
               className="btn-primary flex items-center gap-2"
@@ -121,6 +130,7 @@ function Closet() {
             </button>
           </div>
 
+          {/* Type filter buttons */}
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedType(undefined)}
@@ -148,6 +158,7 @@ function Closet() {
           </div>
         </motion.div>
 
+        {/* Error message */}
         {error && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -158,6 +169,7 @@ function Closet() {
           </motion.div>
         )}
 
+        {/* Items grid or loading skeleton */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {Array.from({ length: 8 }).map((_, index) => (
@@ -187,6 +199,7 @@ function Closet() {
                   exit={{ opacity: 0, scale: 0.8 }}
                   className="card"
                 >
+                  {/* Item image */}
                   <div className="aspect-square bg-gray-50 relative overflow-hidden group">
                     {item.imageUrl ? (
                       <img
@@ -203,6 +216,7 @@ function Closet() {
                       </div>
                     )}
                   </div>
+                  {/* Item details */}
                   <div className="p-4">
                     <h3 className="font-semibold text-lg text-gray-800 mb-1">
                       {item.name}
@@ -210,6 +224,7 @@ function Closet() {
                     {item.brand && (
                       <p className="text-sm text-gray-600 mb-2">{item.brand}</p>
                     )}
+                    {/* Color tags */}
                     <div className="flex flex-wrap gap-1 mb-2">
                       {item.colors.map((color) => (
                         <span
@@ -220,6 +235,7 @@ function Closet() {
                         </span>
                       ))}
                     </div>
+                    {/* Occasion tags */}
                     <div className="flex flex-wrap gap-1 mb-3">
                       {item.occasions.map((occasion) => (
                         <span
@@ -230,11 +246,13 @@ function Closet() {
                         </span>
                       ))}
                     </div>
+                    {/* Item type and action buttons */}
                     <div className="flex justify-between items-center">
                       <span className="text-xs text-gray-500 capitalize">
                         {item.type}
                       </span>
                       <div className="flex gap-2">
+                        {/* Edit button */}
                         <button
                           onClick={() => {
                             setEditingItem(item);
@@ -244,6 +262,7 @@ function Closet() {
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
+                        {/* Delete button */}
                         <button
                           onClick={() => handleDelete(item._id, item.name)}
                           className="p-1 text-gray-400 hover:text-red-600 transition-colors"
@@ -259,6 +278,7 @@ function Closet() {
           </motion.div>
         )}
 
+        {/* Empty state message */}
         {!loading && filteredItems.length === 0 && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -278,6 +298,7 @@ function Closet() {
         )}
       </div>
 
+      {/* Add/Edit item modal */}
       {isModalOpen && (
         <AddItemModal
           isOpen={isModalOpen}
@@ -290,6 +311,7 @@ function Closet() {
         />
       )}
 
+      {/* Delete confirmation dialog */}
       <ConfirmDelete
         isOpen={deleteConfirm.isOpen}
         onClose={() => setDeleteConfirm({ isOpen: false })}
@@ -298,3 +320,6 @@ function Closet() {
       />
     </div>
   );
+}
+
+export default Closet;
