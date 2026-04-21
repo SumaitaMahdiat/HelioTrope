@@ -1,3 +1,4 @@
+// Delete confirmation modal for closet items
 import { X, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -28,6 +29,7 @@ const ConfirmDelete = ({
         className="glass w-full max-w-md p-8 rounded-3xl backdrop-blur-xl"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Dialog header with icon */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-red-100 rounded-2xl flex items-center justify-center">
@@ -38,6 +40,7 @@ const ConfirmDelete = ({
               <p className="text-gray-600">This action cannot be undone.</p>
             </div>
           </div>
+          {/* Close button */}
           <button
             onClick={onClose}
             className="p-2 hover:bg-white/50 rounded-xl transition-all"
@@ -46,6 +49,7 @@ const ConfirmDelete = ({
           </button>
         </div>
 
+        {/* Confirmation message with item name */}
         <p className="text-gray-700 mb-8 text-center">
           Are you sure you want to delete{" "}
           <span className="font-semibold text-gray-900">
@@ -54,13 +58,16 @@ const ConfirmDelete = ({
           ?
         </p>
 
+        {/* Action buttons */}
         <div className="flex gap-3 justify-end">
+          {/* Cancel button */}
           <button
             onClick={onClose}
             className="px-6 py-2 btn-secondary rounded-2xl flex-1 text-sm"
           >
             Cancel
           </button>
+          {/* Delete button */}
           <button
             onClick={onConfirm}
             className="px-6 py-2 bg-linear-to-r from-red-500 to-red-600 text-white rounded-2xl flex-1 font-semibold shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
