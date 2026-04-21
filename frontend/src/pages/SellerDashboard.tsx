@@ -1,3 +1,4 @@
+// Seller dashboard - manage storefront items and social integrations
 import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -24,6 +25,7 @@ const SellerDashboard: React.FC = () => {
     "makeup",
   ];
 
+  // Fetch all items from closet
   const loadStoreItems = async () => {
     try {
       setLoadingItems(true);
@@ -37,6 +39,7 @@ const SellerDashboard: React.FC = () => {
     }
   };
 
+  // Delete item after confirmation
   const handleDeleteItem = async (item: ClosetItem) => {
     const confirmed = window.confirm(
       `Delete "${item.name}" from your storefront?`,
@@ -59,6 +62,7 @@ const SellerDashboard: React.FC = () => {
     }
   };
 
+  // Quick edit item name and type via prompts
   const handleQuickEditItem = async (item: ClosetItem) => {
     const nextNameRaw = window.prompt("Edit product name", item.name);
     if (nextNameRaw == null) {
@@ -113,6 +117,7 @@ const SellerDashboard: React.FC = () => {
   return (
     <div className="min-h-screen p-6 animate-slide-in">
       <div className="max-w-5xl mx-auto">
+        {/* Header */}
         <div className="mb-12 glass p-8 rounded-3xl">
           <h1 className="text-4xl font-bold text-gray-900 mb-3">
             Seller Dashboard
@@ -123,7 +128,9 @@ const SellerDashboard: React.FC = () => {
           </p>
         </div>
 
+        {/* Quick access cards */}
         <div className="grid gap-6 sm:grid-cols-2">
+          {/* Social integration card */}
           <Link
             to="/seller/social"
             className="group glass p-8 rounded-3xl border border-white/50 hover:border-white transition-all hover:shadow-lg hover:-translate-y-1"
@@ -151,6 +158,7 @@ const SellerDashboard: React.FC = () => {
             </div>
           </Link>
 
+          {/* Quick actions info card */}
           <div className="glass p-8 rounded-3xl border border-white/50">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">
               Seller quick actions
@@ -180,6 +188,7 @@ const SellerDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* Storefront items section */}
         <section className="mt-10 glass p-8 rounded-3xl border border-white/50">
           <div className="flex items-center justify-between gap-4 mb-6">
             <div>
@@ -191,6 +200,7 @@ const SellerDashboard: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Reload button */}
               <button
                 onClick={() => {
                   void loadStoreItems();
@@ -200,6 +210,7 @@ const SellerDashboard: React.FC = () => {
                 <RefreshCcw className="h-4 w-4" />
                 Reload Items
               </button>
+              {/* Link to social imports */}
               <Link
                 to="/seller/social"
                 className="btn-secondary inline-flex items-center gap-2 text-sm"
@@ -210,17 +221,20 @@ const SellerDashboard: React.FC = () => {
             </div>
           </div>
 
+          {/* Error message */}
           {itemsError && (
             <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 mb-4">
               {itemsError}
             </div>
           )}
+          {/* Success message */}
           {!itemsError && itemsInfo && (
             <div className="rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-700 mb-4">
               {itemsInfo}
             </div>
           )}
 
+          {/* Items grid or skeleton loader */}
           {loadingItems ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {Array.from({ length: 3 }).map((_, index) => (
@@ -246,6 +260,7 @@ const SellerDashboard: React.FC = () => {
                   key={item._id}
                   className="card bg-white overflow-hidden"
                 >
+                  {/* Item image */}
                   <div className="h-44 bg-slate-100">
                     {item.imageUrl ? (
                       <img
@@ -259,6 +274,7 @@ const SellerDashboard: React.FC = () => {
                       </div>
                     )}
                   </div>
+                  {/* Item info and actions */}
                   <div className="p-4">
                     <h3 className="font-semibold text-gray-900 line-clamp-1">
                       {item.name}
@@ -267,6 +283,7 @@ const SellerDashboard: React.FC = () => {
                       {item.type}
                       {item.platform ? ` • from ${item.platform}` : ""}
                     </p>
+                    {/* Edit and delete buttons */}
                     <div className="mt-3 flex gap-2">
                       <button
                         onClick={() => {
