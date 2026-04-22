@@ -1,4 +1,3 @@
-/** Simple color families for harmony scoring (rule-based, not perceptual lab). */
 const WARM = new Set([
     "red",
     "orange",
