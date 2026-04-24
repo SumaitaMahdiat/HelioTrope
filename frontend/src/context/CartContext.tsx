@@ -79,17 +79,17 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
         quantity,
         userId: "check-localStorage",
       });
-      await addToCart(productId, quantity);
+      const nextCart = await addToCart(productId, quantity);
       console.log("[CartContext] Added successfully, refreshing cart");
-      await mutateCart();
+      await mutateCart(nextCart, false);
     },
     [mutateCart],
   );
 
   const optimisticRemove = useCallback(
     async (productId: string) => {
-      await removeCartItem(productId);
-      await mutateCart();
+      const nextCart = await removeCartItem(productId);
+      await mutateCart(nextCart, false);
     },
     [mutateCart],
   );

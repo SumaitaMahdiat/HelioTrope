@@ -1,77 +1,85 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ShoppingCart } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getMarketplaceProducts,
   getImageUrl,
   getProductSuggestions,
+  createItem,
   type MarketplaceProduct,
   type ProductSuggestionResponse,
 } from "../api";
-import CartDrawer from "../components/CartDrawer";
-import { useCart } from "../context/CartContext";
 
 const Marketplace = () => {
-  const navigate = useNavigate();
-  const { cart, totalItems, addToCart, removeFromCart } = useCart();
   const [products, setProducts] = useState<MarketplaceProduct[]>([]);
+
   const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState("");
-  const [cartLoading, setCartLoading] = useState(false);
-  const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
+  const [success, setSuccess] = useState("");
+  const [closetLoadingId, setClosetLoadingId] = useState<string | null>(null);
+  const [addedProductId, setAddedProductId] = useState<string | null>(null);
   const [suggestions, setSuggestions] =
     useState<ProductSuggestionResponse | null>(null);
   const [suggestionLoadingId, setSuggestionLoadingId] = useState<string | null>(
     null,
   );
   const loaderRef = useRef<HTMLDivElement | null>(null);
+  const pageRef = useRef(1);
   const pageSize = 24;
 
-  const getApiErrorMessage = (err: unknown, fallback: string) => {
-    if (axios.isAxiosError(err)) {
-      const apiError = err.response?.data?.error;
-      if (typeof apiError === "string" && apiError.trim()) {
-        return apiError;
-      }
-      if (typeof err.message === "string" && err.message.trim()) {
-        return err.message;
-      }
+  const CATEGORIES = [
+    { value: "", label: "All Categories" },
+    { value: "smartphones", label: "Smartphones" },
+    { value: "laptops", label: "Laptops" },
+    { value: "fragrances", label: "Fragrances" },
+    { value: "groceries", label: "Groceries (Food)" },
+  ] as const;
+
+  const getApiErrorMessage = (err: any, fallback: string) => {
+    const apiError = err.response?.data?.error;
+    if (typeof apiError === "string" && apiError.trim()) {
+      return apiError;
+    }
+    if (typeof err.message === "string" && err.message.trim()) {
+      return err.message;
     }
     return fallback;
   };
 
-  const refreshMarketplace = async () => {
+  const refreshMarketplace = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
+      setSuccess("");
+      setAddedProductId(null);
+      pageRef.current = 1;
+      setProducts([]);
       const listing = await getMarketplaceProducts({
         q: search || undefined,
+        category: category || undefined,
         limit: pageSize,
         page: 1,
       });
 
       setProducts(listing.products);
       setHasMore(listing.pagination.hasMore);
-      setPage(1);
     } catch {
       setError("Could not load marketplace data.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [category, search]);
 
-  const loadMoreProducts = async () => {
+  const loadMoreProducts = useCallback(async () => {
     if (loading || loadingMore || !hasMore) return;
     try {
       setLoadingMore(true);
-      const nextPage = page + 1;
+      const nextPage = pageRef.current + 1;
       const listing = await getMarketplaceProducts({
         q: search || undefined,
+        category: category || undefined,
         limit: pageSize,
         page: nextPage,
       });
@@ -85,17 +93,17 @@ const Marketplace = () => {
         return [...prev, ...uniqueIncoming];
       });
       setHasMore(listing.pagination.hasMore);
-      setPage(nextPage);
+      pageRef.current = nextPage;
     } catch {
       setError("Could not load more marketplace products.");
     } finally {
       setLoadingMore(false);
     }
-  };
+  }, [category, hasMore, loading, loadingMore, search]);
 
   useEffect(() => {
     void refreshMarketplace();
-  }, []);
+  }, [search, category]);
 
   useEffect(() => {
     const loader = loaderRef.current;
@@ -113,46 +121,48 @@ const Marketplace = () => {
 
     observer.observe(loader);
     return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, page, search]);
-
-  const cartProductIds = useMemo(
-    () => new Set((cart?.items || []).map((line) => line.product.id)),
-    [cart],
-  );
+  }, [hasMore, loading, loadingMore, loadMoreProducts]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     await refreshMarketplace();
   };
 
-  const handleAddToCart = async (product: MarketplaceProduct) => {
+  const handleAddToCloset = async (product: MarketplaceProduct) => {
     try {
-      setCartLoading(true);
+      setClosetLoadingId(product.id);
       setError("");
-      console.log("[Marketplace] Adding to cart:", {
-        productId: product.id,
-        name: product.name,
-      });
-      await addToCart(product.id, 1);
-      console.log("[Marketplace] Successfully added to cart");
+      setSuccess("");
+
+      const formData = new FormData();
+      formData.append("name", product.name);
+      formData.append("type", product.type);
+      product.colors.forEach((color) => formData.append("colors", color));
+      if (product.brand) formData.append("brand", product.brand);
+      product.occasions.forEach((occasion) =>
+        formData.append("occasions", occasion),
+      );
+      if (product.imageUrl) formData.append("imageUrl", product.imageUrl);
+      formData.append("notes", `${product.name} (Added from Marketplace)`);
+
+      await createItem(formData);
+      setAddedProductId(product.id);
+      setSuccess(`${product.name} added to your closet.`);
     } catch (err) {
-      const errMsg = getApiErrorMessage(err, "Could not add item to cart.");
-      console.error("[Marketplace] Add to cart error:", errMsg, err);
+      if (err && typeof err === "object" && "response" in err) {
+        const response = (
+          err as { response?: { status?: number; data?: { error?: string } } }
+        ).response;
+        if (response?.status === 409) {
+          setAddedProductId(product.id);
+          setSuccess(`${product.name} is already in your closet.`);
+          return;
+        }
+      }
+      const errMsg = getApiErrorMessage(err, "Could not add item to closet.");
       setError(errMsg);
     } finally {
-      setCartLoading(false);
-    }
-  };
-
-  const handleRemoveCartItem = async (productId: string) => {
-    try {
-      setCartLoading(true);
-      setError("");
-      await removeFromCart(productId);
-    } catch {
-      setError("Could not remove cart item.");
-    } finally {
-      setCartLoading(false);
+      setClosetLoadingId(null);
     }
   };
 
@@ -193,6 +203,7 @@ const Marketplace = () => {
     }
   };
 
+  //
   return (
     <div className="min-h-screen bg-linear-to-b from-amber-50 via-orange-50 to-rose-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -200,20 +211,11 @@ const Marketplace = () => {
           <div>
             <h1 className="text-4xl font-bold text-gray-900">Marketplace</h1>
             <p className="text-gray-600 mt-2">
-              Browse seller products, add to cart, and get styling suggestions.
+              Browse seller products, add to closet directly, and get styling
+              suggestions.
             </p>
           </div>
-          <button
-            onClick={() => setCartDrawerOpen(true)}
-            className="relative rounded-full bg-orange-500 hover:bg-orange-600 text-white p-4 shadow-lg transition-all"
-          >
-            <ShoppingCart className="w-6 h-6" />
-            {totalItems > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-                {totalItems}
-              </span>
-            )}
-          </button>
+          {/* Cart functionality replaced with direct closet add */}
         </div>
 
         {error && (
@@ -224,20 +226,33 @@ const Marketplace = () => {
 
         <div className="grid lg:grid-cols-1 gap-6">
           <section className="lg:col-span-1">
-            <form onSubmit={handleSearch} className="mb-4 flex gap-2">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, brand, notes"
-                className="w-full rounded-xl border border-orange-200 px-4 py-3 bg-white/90"
-              />
-              <button
-                type="submit"
-                className="rounded-xl bg-orange-600 text-white px-5 py-3 font-semibold"
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+              <form onSubmit={handleSearch} className="flex-1 flex gap-2">
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name, brand, notes"
+                  className="flex-1 rounded-xl border border-orange-200 px-4 py-3 bg-white/90"
+                />
+                <button
+                  type="submit"
+                  className="rounded-xl bg-orange-600 text-white px-5 py-3 font-semibold whitespace-nowrap"
+                >
+                  Search
+                </button>
+              </form>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="rounded-xl border border-orange-200 px-4 py-3 bg-white/90 min-w-40 text-sm"
               >
-                Search
-              </button>
-            </form>
+                {CATEGORIES.map((cat) => (
+                  <option key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {loading ? (
               <div className="text-gray-600">Loading products...</div>
@@ -290,15 +305,18 @@ const Marketplace = () => {
                         <div className="mt-4 flex gap-2">
                           <button
                             onClick={() => {
-                              void handleAddToCart(product);
+                              void handleAddToCloset(product);
                             }}
-                            disabled={cartLoading}
+                            disabled={closetLoadingId === product.id}
                             className="flex-1 rounded-xl bg-emerald-600 text-white px-3 py-2 text-sm font-semibold disabled:opacity-60"
                           >
-                            {cartProductIds.has(product.id)
-                              ? "In Cart"
-                              : "Add to Cart"}
+                            {addedProductId === product.id
+                              ? "Added ✓"
+                              : closetLoadingId === product.id
+                                ? "Adding..."
+                                : "Add to Closet"}
                           </button>
+
                           <button
                             onClick={() => {
                               void handleSuggest(product);
@@ -320,11 +338,6 @@ const Marketplace = () => {
                 {loadingMore && (
                   <p className="mt-3 text-sm text-gray-600">
                     Loading more products...
-                  </p>
-                )}
-                {!hasMore && products.length > 0 && (
-                  <p className="mt-3 text-sm text-gray-500">
-                    You reached the end of listings.
                   </p>
                 )}
               </>
@@ -387,6 +400,62 @@ const Marketplace = () => {
                     <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                       {suggestions.recommendation.assistant}
                     </p>
+                  </div>
+                )}
+
+                {(suggestions.relatedClosetProducts?.length > 0 ||
+                  suggestions.relatedMarketplaceProducts?.length > 0) && (
+                  <div className="mb-8">
+                    <h3 className="font-semibold text-gray-900 mb-3">
+                      Same-Category Suggestions
+                    </h3>
+                    {suggestions.relatedClosetProducts?.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-sm font-medium text-emerald-700 mb-2">
+                          From your closet
+                        </p>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          {suggestions.relatedClosetProducts.map((product) => (
+                            <div
+                              key={`closet-${product.id}`}
+                              className="rounded-xl border border-emerald-100 bg-emerald-50 p-3"
+                            >
+                              <p className="font-medium text-gray-900 line-clamp-1">
+                                {product.name}
+                              </p>
+                              <p className="text-xs text-gray-600 capitalize mt-1">
+                                {product.type}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {suggestions.relatedMarketplaceProducts?.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium text-orange-700 mb-2">
+                          Marketplace picks
+                        </p>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          {suggestions.relatedMarketplaceProducts.map(
+                            (product) => (
+                              <div
+                                key={`market-${product.id}`}
+                                className="rounded-xl border border-orange-100 bg-orange-50 p-3"
+                              >
+                                <p className="font-medium text-gray-900 line-clamp-1">
+                                  {product.name}
+                                </p>
+                                <p className="text-xs text-gray-600 capitalize mt-1">
+                                  {product.type}
+                                </p>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -465,7 +534,7 @@ const Marketplace = () => {
 
                 <div className="bg-blue-100 border border-blue-300 rounded-xl p-4 mt-8">
                   <p className="text-sm text-blue-900">
-                    💡 This suggestion combines items from your closet (
+                    This suggestion combines items from your closet (
                     {suggestions.source?.closetCount || 0}) and the marketplace
                     ({suggestions.source?.shopCount || 0} items available).
                   </p>
@@ -495,18 +564,17 @@ const Marketplace = () => {
         )}
       </div>
 
-      {/* Cart Drawer */}
-      <CartDrawer
-        isOpen={cartDrawerOpen}
-        onClose={() => setCartDrawerOpen(false)}
-        cart={cart || { items: [], totalItems: 0 }}
-        onRemoveItem={handleRemoveCartItem}
-        onCheckout={() => {
-          setCartDrawerOpen(false);
-          navigate("/checkout");
-        }}
-        cartLoading={cartLoading}
-      />
+      {success && (
+        <div className="fixed top-4 right-4 bg-emerald-500 text-white px-6 py-3 rounded-2xl shadow-2xl z-50 max-w-sm">
+          {success}
+          <button
+            onClick={() => setSuccess("")}
+            className="ml-4 text-white/80 hover:text-white text-xl leading-none"
+          >
+            &times;
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import axios from "axios";
+import { API_ORIGIN } from "../api";
 
 // User data model
 interface User {
@@ -27,6 +28,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Auth hook - throws if used outside AuthProvider
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -65,9 +67,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   // Login with email and password, store token and user
-  const login = async (email: string, password: string, demo = false) => {
-    const url = `http://localhost:5001/api/auth/login${demo ? "?demo=true" : ""}`;
-    const response = await axios.post(url, {
+  const login = async (email: string, password: string) => {
+    const response = await axios.post(`${API_ORIGIN}/api/auth/login`, {
       email,
       password,
     });
@@ -85,10 +86,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     role: string,
     name: string,
   ) => {
-    const response = await axios.post(
-      "http://localhost:5001/api/auth/register",
-      { email, password, role, name },
-    );
+    const response = await axios.post(`${API_ORIGIN}/api/auth/register`, {
+      email,
+      password,
+      role,
+      name,
+    });
     const { token, user: userData } = response.data;
     localStorage.setItem("token", token);
     localStorage.setItem("user", JSON.stringify(userData));

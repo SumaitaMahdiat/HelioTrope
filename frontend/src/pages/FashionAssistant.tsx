@@ -1,7 +1,5 @@
-// AI-powered fashion styling assistant chat interface
 import React, { useState, useRef, useEffect } from "react";
-
-const API_ORIGIN = import.meta.env.VITE_API_URL || "http://localhost:5001";
+import { API_ORIGIN } from "../api";
 
 interface ChatMessage {
   role: "user" | "assistant";

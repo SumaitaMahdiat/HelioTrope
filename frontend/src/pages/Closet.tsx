@@ -1,4 +1,3 @@
-// Buyer's digital closet - view and manage wardrobe items
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Trash2, Edit3, ShoppingBag } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";

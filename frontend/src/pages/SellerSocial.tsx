@@ -61,6 +61,7 @@ const SellerSocial: React.FC = () => {
     null,
   );
 
+  // Load connection options and social posts
   const loadData = async (forceRefresh = false) => {
     setLoading(true);
     setError("");
@@ -107,6 +108,7 @@ const SellerSocial: React.FC = () => {
     void loadData();
   }, []);
 
+  // Connect to demo Facebook/Instagram account
   const handleDemoConnect = async (platform: "facebook" | "instagram") => {
     try {
       setConnectingPlatform(platform);
@@ -121,6 +123,7 @@ const SellerSocial: React.FC = () => {
     }
   };
 
+  // Convert social post to product draft
   const handleConvertPost = async (post: SocialPost) => {
     try {
       setConvertingPostId(post.id);
@@ -138,6 +141,7 @@ const SellerSocial: React.FC = () => {
     }
   };
 
+  // Save converted draft as new storefront item
   const handleSaveDraft = async (post: SocialPost, draft: ConvertedDraft) => {
     try {
       setSavingPostId(post.id);
@@ -159,6 +163,7 @@ const SellerSocial: React.FC = () => {
   return (
     <div className="min-h-screen p-6 animate-slide-in">
       <div className="max-w-6xl mx-auto">
+        {/* Header with back button */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
             <h1 className="text-4xl font-bold text-gray-800">
@@ -178,6 +183,7 @@ const SellerSocial: React.FC = () => {
           </button>
         </div>
 
+        {/* Error and info messages */}
         {error && (
           <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-red-700 mb-6">
             {error}
@@ -189,7 +195,9 @@ const SellerSocial: React.FC = () => {
           </div>
         )}
 
+        {/* Connection options and quick actions section */}
         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr] mb-10">
+          {/* Connection options card */}
           <div className="card p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -229,6 +237,7 @@ const SellerSocial: React.FC = () => {
                         </h3>
                         <p className="mt-2 text-gray-600">{option.note}</p>
                       </div>
+                      {/* Status badge */}
                       <div className="text-right">
                         <span
                           className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
@@ -243,6 +252,7 @@ const SellerSocial: React.FC = () => {
                         </span>
                       </div>
                     </div>
+                    {/* OAuth or demo connection button */}
                     {option.oauthUrl ? (
                       <a
                         href={option.oauthUrl}
@@ -281,6 +291,7 @@ const SellerSocial: React.FC = () => {
             )}
           </div>
 
+          {/* Quick actions sidebar */}
           <div className="card p-6">
             <h2 className="text-2xl font-semibold text-gray-900">
               Quick actions
@@ -307,6 +318,7 @@ const SellerSocial: React.FC = () => {
           </div>
         </section>
 
+        {/* Social posts list section */}
         <section className="card p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -346,6 +358,7 @@ const SellerSocial: React.FC = () => {
             <div className="grid gap-4 xl:grid-cols-2">
               {posts.map((post) => (
                 <article key={post.id} className="card bg-white">
+                  {/* Post image with platform badge */}
                   <div className="relative h-64 overflow-hidden bg-slate-100">
                     <img
                       src={post.mediaUrl}
@@ -362,6 +375,7 @@ const SellerSocial: React.FC = () => {
                     </span>
                   </div>
                   <div className="p-5">
+                    {/* Post meta and caption */}
                     <div className="mb-3 flex items-center justify-between text-xs uppercase tracking-[0.25em] text-gray-500">
                       <span>{post.platform}</span>
                       <Link2 className="h-4 w-4 text-gray-500" />
@@ -379,6 +393,7 @@ const SellerSocial: React.FC = () => {
                         → View original post
                       </a>
                     )}
+                    {/* Convert and save buttons */}
                     <div className="space-y-2">
                       <button
                         onClick={() => handleConvertPost(post)}
@@ -393,6 +408,7 @@ const SellerSocial: React.FC = () => {
                           ? "Converting..."
                           : "Generate Draft"}
                       </button>
+                      {/* Draft preview and save section */}
                       {convertedDrafts[post.id] && (
                         <div className="space-y-2 pt-2 border-t">
                           <div className="text-xs text-green-800 bg-green-50 p-2 rounded-lg">
