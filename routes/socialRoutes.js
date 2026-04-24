@@ -1,25 +1,17 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import { UserModel } from "../models/User.js";
-import { ClosetItemModel } from "../models/ClosetItem.js";
+import { ClosetItemModel, CLOSET_ITEM_TYPES } from "../models/ClosetItem.js";
 import { authenticate } from "./authRoutes.js";
 import mongoose from "mongoose";
 
 const router = express.Router();
+// Facebook Graph API base URL used by the OAuth callback flow.
 const GRAPH = "https://graph.facebook.com/v21.0";
 const DUMMYJSON = "https://dummyjson.com";
 const IMAGE_FALLBACK = "https://placehold.co/800x800/png?text=Social+Post";
 
-// Types
-const SocialPost = {
-  id: "string",
-  platform: "facebook|instagram",
-  caption: "string|null",
-  mediaUrl: "string|null",
-  permalink: "string|null",
-  createdAt: "string",
-};
-
+// Convert a social post into the draft structure used by the closet importer.
 function postToProductDraft(post) {
   const titleBase =
     post.caption
@@ -41,28 +33,34 @@ function postToProductDraft(post) {
   };
 }
 
+// Tiny helper to guard against non-HTTP media links.
 function isHttpUrl(value) {
   return typeof value === "string" && /^https?:\/\//i.test(value);
 }
 
+// Use a placeholder image whenever the source media URL is missing or invalid.
 function resolveMediaUrl(candidate, fallback = IMAGE_FALLBACK) {
   return isHttpUrl(candidate) ? candidate : fallback;
 }
 
+// Wrap fetch so the caller always gets both the response and parsed JSON body.
 async function fetchJson(url) {
   const response = await fetch(url);
   const data = await response.json();
   return { response, data };
 }
 
+// Pick a display name from the different name fields demo APIs may return.
 function pickUserDisplayName(user, fallback) {
   return user?.firstName || user?.displayName || user?.username || fallback;
 }
 
+// Ensure the session user id looks like a valid MongoDB ObjectId.
 function hasValidUserId(id) {
   return typeof id === "string" && mongoose.Types.ObjectId.isValid(id);
 }
 
+// Parse page/refresh counters into a safe positive integer.
 function toPositiveInt(value, fallback = 0) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   if (Number.isNaN(parsed)) {
@@ -71,6 +69,7 @@ function toPositiveInt(value, fallback = 0) {
   return Math.abs(parsed);
 }
 
+// Rotate through dummy data slices so refreshes do not always return the same rows.
 function getRotatingSkip({ refreshKey, total, limit }) {
   const safeTotal = Math.max(total, 1);
   const safeLimit = Math.max(Math.min(limit, safeTotal), 1);
@@ -81,6 +80,52 @@ function getRotatingSkip({ refreshKey, total, limit }) {
   return toPositiveInt(refreshKey, Date.now()) % (maxSkip + 1);
 }
 
+async function fetchDummySocialSources(limit, refreshKey) {
+  const postsSkip = getRotatingSkip({
+    refreshKey,
+    total: 250,
+    limit,
+  });
+  const usersSkip = getRotatingSkip({
+    refreshKey,
+    total: 200,
+    limit,
+  });
+  const productsSkip = getRotatingSkip({
+    refreshKey,
+    total: 194,
+    limit,
+  });
+
+  const [postsResult, usersResult, productsResult] = await Promise.all([
+    fetchJson(`${DUMMYJSON}/posts?limit=${limit}&skip=${postsSkip}`),
+    fetchJson(`${DUMMYJSON}/users?limit=${limit}&skip=${usersSkip}`),
+    fetchJson(`${DUMMYJSON}/products?limit=${limit}&skip=${productsSkip}`),
+  ]);
+
+  if (!postsResult.response.ok || !Array.isArray(postsResult.data?.posts)) {
+    return { error: `HTTP ${postsResult.response.status}` };
+  }
+
+  if (!usersResult.response.ok || !Array.isArray(usersResult.data?.users)) {
+    return { error: `HTTP ${usersResult.response.status}` };
+  }
+
+  if (
+    !productsResult.response.ok ||
+    !Array.isArray(productsResult.data?.products)
+  ) {
+    return { error: `HTTP ${productsResult.response.status}` };
+  }
+
+  return {
+    posts: postsResult.data.posts,
+    users: usersResult.data.users,
+    products: productsResult.data.products,
+  };
+}
+
+// Build demo Facebook posts from DummyJSON data when a real provider is not used.
 async function fetchFacebookPagePosts({
   pageId,
   accessToken,
@@ -88,47 +133,14 @@ async function fetchFacebookPagePosts({
   refreshKey,
 }) {
   try {
-    const postsSkip = getRotatingSkip({
-      refreshKey,
-      total: 250,
-      limit,
-    });
-    const usersSkip = getRotatingSkip({
-      refreshKey,
-      total: 200,
-      limit,
-    });
-    const productsSkip = getRotatingSkip({
-      refreshKey,
-      total: 194,
-      limit,
-    });
-
-    const [postsResult, usersResult, productsResult] = await Promise.all([
-      fetchJson(`${DUMMYJSON}/posts?limit=${limit}&skip=${postsSkip}`),
-      fetchJson(`${DUMMYJSON}/users?limit=${limit}&skip=${usersSkip}`),
-      fetchJson(`${DUMMYJSON}/products?limit=${limit}&skip=${productsSkip}`),
-    ]);
-
-    if (!postsResult.response.ok || !Array.isArray(postsResult.data?.posts)) {
-      return { posts: [], error: `HTTP ${postsResult.response.status}` };
+    const source = await fetchDummySocialSources(limit, refreshKey);
+    if (source.error) {
+      return { posts: [], error: source.error };
     }
 
-    if (!usersResult.response.ok || !Array.isArray(usersResult.data?.users)) {
-      return { posts: [], error: `HTTP ${usersResult.response.status}` };
-    }
-
-    if (
-      !productsResult.response.ok ||
-      !Array.isArray(productsResult.data?.products)
-    ) {
-      return { posts: [], error: `HTTP ${productsResult.response.status}` };
-    }
-
-    const posts = postsResult.data.posts.map((row, idx) => {
-      const user = usersResult.data.users[idx % usersResult.data.users.length];
-      const product =
-        productsResult.data.products[idx % productsResult.data.products.length];
+    const posts = source.posts.map((row, idx) => {
+      const user = source.users[idx % source.users.length];
+      const product = source.products[idx % source.products.length];
       const author = pickUserDisplayName(user, `Creator ${idx + 1}`);
 
       return {
@@ -148,49 +160,17 @@ async function fetchFacebookPagePosts({
   }
 }
 
+// Build demo Instagram posts in the same shape as real media items.
 async function fetchInstagramDemoPosts(limit = 25, refreshKey) {
   try {
-    const postsSkip = getRotatingSkip({
-      refreshKey,
-      total: 250,
-      limit,
-    });
-    const usersSkip = getRotatingSkip({
-      refreshKey,
-      total: 200,
-      limit,
-    });
-    const productsSkip = getRotatingSkip({
-      refreshKey,
-      total: 194,
-      limit,
-    });
-
-    const [postsResult, usersResult, productsResult] = await Promise.all([
-      fetchJson(`${DUMMYJSON}/posts?limit=${limit}&skip=${postsSkip}`),
-      fetchJson(`${DUMMYJSON}/users?limit=${limit}&skip=${usersSkip}`),
-      fetchJson(`${DUMMYJSON}/products?limit=${limit}&skip=${productsSkip}`),
-    ]);
-
-    if (!postsResult.response.ok || !Array.isArray(postsResult.data?.posts)) {
-      return { posts: [], error: `HTTP ${postsResult.response.status}` };
+    const source = await fetchDummySocialSources(limit, refreshKey);
+    if (source.error) {
+      return { posts: [], error: source.error };
     }
 
-    if (!usersResult.response.ok || !Array.isArray(usersResult.data?.users)) {
-      return { posts: [], error: `HTTP ${usersResult.response.status}` };
-    }
-
-    if (
-      !productsResult.response.ok ||
-      !Array.isArray(productsResult.data?.products)
-    ) {
-      return { posts: [], error: `HTTP ${productsResult.response.status}` };
-    }
-
-    const posts = postsResult.data.posts.map((row, idx) => {
-      const user = usersResult.data.users[idx % usersResult.data.users.length];
-      const product =
-        productsResult.data.products[idx % productsResult.data.products.length];
+    const posts = source.posts.map((row, idx) => {
+      const user = source.users[idx % source.users.length];
+      const product = source.products[idx % source.products.length];
       const author = pickUserDisplayName(user, `Creator ${idx + 1}`);
       const productName = product?.title || product?.name || "Styled look";
 
@@ -212,6 +192,7 @@ async function fetchInstagramDemoPosts(limit = 25, refreshKey) {
   }
 }
 
+// Prefer Ayrshare for Instagram data, then fall back to demo posts if needed.
 async function fetchInstagramMedia({
   igUserId,
   accessToken,
@@ -278,6 +259,7 @@ async function fetchInstagramMedia({
   }
 }
 
+// Seller-only endpoint that stores demo social connection state on the user record.
 router.post("/demo/connect", authenticate, async (req, res) => {
   if (req.user.role !== "seller") {
     return res.status(403).json({ error: "Seller only" });
@@ -310,6 +292,40 @@ router.post("/demo/connect", authenticate, async (req, res) => {
   });
 });
 
+// Seller-only endpoint to disconnect one or all social providers.
+router.post("/disconnect", authenticate, async (req, res) => {
+  if (req.user.role !== "seller") {
+    return res.status(403).json({ error: "Seller only" });
+  }
+
+  const platform = String(req.body?.platform || "").toLowerCase();
+  if (!["facebook", "instagram", "both"].includes(platform)) {
+    return res
+      .status(400)
+      .json({ error: "platform must be facebook, instagram, or both" });
+  }
+
+  const unsetFields = {};
+  if (platform === "facebook" || platform === "both") {
+    unsetFields["sellerSocial.fbPageId"] = "";
+    unsetFields["sellerSocial.fbAccessToken"] = "";
+  }
+  if (platform === "instagram" || platform === "both") {
+    unsetFields["sellerSocial.igUserId"] = "";
+    unsetFields["sellerSocial.igAccessToken"] = "";
+  }
+
+  await UserModel.updateOne({ _id: req.user.id }, { $unset: unsetFields });
+  res.json({
+    success: true,
+    disconnected: {
+      facebook: platform === "facebook" || platform === "both",
+      instagram: platform === "instagram" || platform === "both",
+    },
+  });
+});
+
+// Build a Facebook OAuth URL dynamically from the configured app settings.
 function facebookOAuthAuthorizeUrl({ appId, redirectUri, state, scopes }) {
   const u = new URL("https://www.facebook.com/v21.0/dialog/oauth");
   u.searchParams.set("client_id", appId);
@@ -320,7 +336,7 @@ function facebookOAuthAuthorizeUrl({ appId, redirectUri, state, scopes }) {
   return u.toString();
 }
 
-// Connections options
+// Return the social connection options the seller UI can present.
 router.get("/connections/options", authenticate, async (req, res) => {
   if (!hasValidUserId(req.user?.id)) {
     return res.status(401).json({
@@ -396,7 +412,7 @@ router.get("/connections/options", authenticate, async (req, res) => {
   });
 });
 
-// OAuth callback (call from frontend after redirect)
+// Handle the OAuth redirect, exchange the code, and save the connected accounts.
 router.get("/oauth/facebook/callback", authenticate, async (req, res) => {
   if (req.user.role !== "seller")
     return res.status(403).json({ error: "Seller only" });
@@ -405,23 +421,25 @@ router.get("/oauth/facebook/callback", authenticate, async (req, res) => {
   if (!code || state !== `seller_${req.user.id}`)
     return res.status(400).json({ error: "Invalid callback" });
   try {
-    // Exchange code for token (simplified; prod needs APP_SECRET for long-lived)
+    // Exchange the temporary OAuth code for an access token.
     const tokenUrl = `${GRAPH}oauth/access_token?client_id=${process.env.FACEBOOK_APP_ID}&client_secret=${process.env.FACEBOOK_APP_SECRET}&redirect_uri=${process.env.FACEBOOK_REDIRECT_URI}&code=${code}`;
     const tokenRes = await fetch(tokenUrl);
     const tokenData = await tokenRes.json();
     if (tokenData.error) throw new Error(tokenData.error.message);
     const shortToken = tokenData.access_token;
-    // Get pages/IG users (simplified; use /me/accounts for pages, /me?fields=instagram_business_account)
+
+    // Look up the connected Facebook page and, if present, its Instagram account.
     const pagesUrl = `${GRAPH}me/accounts?access_token=${shortToken}`;
     const pagesRes = await fetch(pagesUrl);
     const pagesData = await pagesRes.json();
     if (pagesData.error) throw new Error(pagesData.error.message);
-    const page = pagesData.data[0]; // First page
+    const page = pagesData.data[0];
     const igUrl = `${GRAPH}${page.id}?fields=instagram_business_account&access_token=${shortToken}`;
     const igRes = await fetch(igUrl);
     const igData = await igRes.json();
     const igAccount = igData.instagram_business_account;
-    // Save to user (populate .select('+sellerSocial.fbAccessToken...') but for update no need
+
+    // Persist the page and token details on the seller profile.
     await UserModel.updateOne(
       { _id: req.user.id },
       {
@@ -430,7 +448,7 @@ router.get("/oauth/facebook/callback", authenticate, async (req, res) => {
           "sellerSocial.fbAccessToken": shortToken,
           ...(igAccount && {
             "sellerSocial.igUserId": igAccount.id,
-            "sellerSocial.igAccessToken": shortToken, // Same token
+            "sellerSocial.igAccessToken": shortToken,
           }),
         },
       },
@@ -441,7 +459,7 @@ router.get("/oauth/facebook/callback", authenticate, async (req, res) => {
   }
 });
 
-// Get Facebook posts
+// Load the seller's Facebook posts, or return an empty state if nothing is connected.
 router.get("/facebook/posts", authenticate, async (req, res) => {
   if (req.user.role !== "seller")
     return res.status(403).json({ error: "Seller only" });
@@ -466,7 +484,7 @@ router.get("/facebook/posts", authenticate, async (req, res) => {
   res.json({ posts: result.posts, demo: false });
 });
 
-// Get Instagram media
+// Load the seller's Instagram media, with the same fallback behavior as Facebook.
 router.get("/instagram/media", authenticate, async (req, res) => {
   if (req.user.role !== "seller")
     return res.status(403).json({ error: "Seller only" });
@@ -489,7 +507,7 @@ router.get("/instagram/media", authenticate, async (req, res) => {
   res.json({ posts: result.posts, demo: false });
 });
 
-// Import all
+// Merge Facebook and Instagram imports into one feed for the seller dashboard.
 router.get("/import/all", authenticate, async (req, res) => {
   if (!hasValidUserId(req.user?.id)) {
     return res.status(401).json({
@@ -512,6 +530,8 @@ router.get("/import/all", authenticate, async (req, res) => {
     igPosts = [],
     fbDemo = false,
     igDemo = false;
+
+  // Only fetch each platform when the caller asked for it and the account is connected.
   if (includeFB) {
     if (user.sellerSocial?.fbPageId) {
       const result = await fetchFacebookPagePosts({
@@ -526,6 +546,7 @@ router.get("/import/all", authenticate, async (req, res) => {
       fbDemo = false;
     }
   }
+
   if (includeIG) {
     if (user.sellerSocial?.igUserId) {
       const result = await fetchInstagramMedia({
@@ -540,6 +561,8 @@ router.get("/import/all", authenticate, async (req, res) => {
       igDemo = false;
     }
   }
+
+  // Combine everything by newest first so the dashboard sees a single timeline.
   const posts = [...fbPosts, ...igPosts].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
@@ -559,7 +582,7 @@ router.get("/import/all", authenticate, async (req, res) => {
   });
 });
 
-// Convert single
+// Convert one social post into a closet-item draft.
 router.post("/import/convert", authenticate, (req, res) => {
   if (req.user.role !== "seller")
     return res.status(403).json({ error: "Seller only" });
@@ -570,7 +593,7 @@ router.post("/import/convert", authenticate, (req, res) => {
   res.json({ draft });
 });
 
-// Convert many
+// Convert many posts at once, which is useful for bulk importing.
 router.post("/import/convert-many", authenticate, (req, res) => {
   if (req.user.role !== "seller")
     return res.status(403).json({ error: "Seller only" });
@@ -584,6 +607,46 @@ router.post("/import/convert-many", authenticate, (req, res) => {
     accepted: drafts.length,
     rejected: posts.length - validPosts.length,
   });
+});
+
+// Create a closet item directly from a social post draft.
+router.post("/import/create-item", authenticate, async (req, res) => {
+  if (req.user.role !== "seller") {
+    return res.status(403).json({ error: "Seller only" });
+  }
+
+  const draft = req.body?.draft;
+  if (!draft || !draft.name || !draft.type) {
+    return res
+      .status(400)
+      .json({ error: "draft with name and type is required" });
+  }
+
+  if (!CLOSET_ITEM_TYPES.includes(String(draft.type))) {
+    return res.status(400).json({
+      error: `type must be one of: ${CLOSET_ITEM_TYPES.join(", ")}`,
+    });
+  }
+
+  const item = await ClosetItemModel.create({
+    userId: req.user.id,
+    name: String(draft.name).trim(),
+    type: String(draft.type),
+    imageUrl: String(draft.imageUrl || "").trim() || undefined,
+    notes: String(draft.notes || "").trim() || undefined,
+    sourcePostId: draft.sourcePostId,
+    platform: draft.platform,
+    sourcePermalink: draft.sourcePermalink,
+    colors: Array.isArray(draft.colors)
+      ? draft.colors.map((c) => String(c).trim()).filter(Boolean)
+      : [],
+    occasions: Array.isArray(draft.occasions)
+      ? draft.occasions.map((o) => String(o).trim()).filter(Boolean)
+      : [],
+    brand: String(draft.brand || "").trim() || undefined,
+  });
+
+  res.status(201).json({ item: item.toObject() });
 });
 
 export default router;
