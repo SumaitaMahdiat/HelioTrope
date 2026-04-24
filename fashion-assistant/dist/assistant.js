@@ -3,6 +3,19 @@ function buildSystemPrompt(closet, context) {
         "Give practical, respectful styling advice. Reference local occasions (eid, weddings, Pohela Boishakh) when relevant. " +
         "If a digital closet is provided, prefer suggesting combinations using those items by name; say what is missing if the user asks for a full look and something is not in the closet. " +
         "Keep answers concise unless the user asks for detail.";
+    base +=
+        "\n\nOutput format must be exactly this structure:" +
+            "\nPrimary Look: <one short paragraph>" +
+            "\nAlternative Look: <one short paragraph>" +
+            "\nAccessories and Footwear: <one short paragraph>" +
+            "\nNotes: <one short paragraph>.";
+    base +=
+        "\n\nHard styling rules:" +
+            "\n- Use exactly one base outfit per look." +
+            "\n- A base outfit is either one full-piece garment (dress/abaya/gown/jumpsuit) OR a top+bottom/set." +
+            "\n- Never combine two base outfits in the same look (example: do not pair a dress with another full set)." +
+            "\n- If another base garment is relevant, place it only in Alternative Look." +
+            "\n- Do not invent item IDs. If an ID is unknown, omit it.";
     if (context?.city)
         base += ` User city hint: ${context.city}.`;
     if (context?.season)

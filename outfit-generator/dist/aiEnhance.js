@@ -45,3 +45,4 @@ export async function explainOutfitWithAI(
     : "No closet images were provided.";
   const userPrompt = `Occasion: ${occasion ?? "unspecified"}. Outfit: ${itemsDesc}. Rule engine notes: ${outfit.ruleNotes.join(" ")} ${imageHint}`;
   return generateOpenRouterText(apiKey, system, userPrompt);
+}

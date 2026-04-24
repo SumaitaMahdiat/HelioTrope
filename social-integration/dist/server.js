@@ -14,8 +14,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "..", "public")));
 const PORT = Number(process.env.PORT) || 3003;
+// In-memory session store (token -> user info)
 const sessions = new Map();
-/** In-memory demo store when APIs are not called */
+// Demo posts for testing without real API credentials
 const demoPosts = [
     {
         id: "demo_fb_1",
@@ -34,6 +35,7 @@ const demoPosts = [
         createdAt: new Date().toISOString(),
     },
 ];
+// Extract session token from Authorization header or custom header
 function readSessionToken(req) {
     const bearer = req.headers.authorization?.startsWith("Bearer ")
         ? req.headers.authorization.slice("Bearer ".length).trim()
@@ -41,6 +43,7 @@ function readSessionToken(req) {
     const headerToken = req.headers["x-session-token"]?.trim();
     return bearer || headerToken || null;
 }
+// Validate session and return user info, or send 401 response
 function requireSession(req, res) {
     const token = readSessionToken(req);
     if (!token) {
@@ -54,14 +57,17 @@ function requireSession(req, res) {
     }
     return { token, session };
 }
+// POST login - create a session for buyer or seller
 app.post("/api/auth/login", (req, res) => {
     const role = req.body?.role;
     const displayNameRaw = req.body?.displayName;
     const displayName = displayNameRaw?.trim() || "Demo User";
+    // Validate role
     if (role !== "buyer" && role !== "seller") {
         res.status(400).json({ error: "role must be 'buyer' or 'seller'." });
         return;
     }
+    // Generate session token and store user info
     const token = randomUUID();
     sessions.set(token, { role, displayName });
     res.json({
@@ -72,11 +78,13 @@ app.post("/api/auth/login", (req, res) => {
             : "Buyer login successful. Social connection options are seller-only.",
     });
 });
+// GET connection options - show available OAuth flows (sellers only)
 app.get("/api/social/connections/options", (req, res) => {
     const auth = requireSession(req, res);
     if (!auth)
         return;
     const { session } = auth;
+    // Restrict to sellers
     if (session.role !== "seller") {
         res.json({
             role: session.role,
@@ -90,6 +98,7 @@ app.get("/api/social/connections/options", (req, res) => {
     const redirectUri = process.env.FACEBOOK_REDIRECT_URI;
     const canGenerateOAuth = Boolean(appId && redirectUri);
     const oauthState = randomUUID();
+    // Generate Facebook OAuth URL if configured
     const facebookOauthUrl = canGenerateOAuth
         ? facebookOAuthAuthorizeUrl({
             appId: String(appId),
@@ -122,9 +131,11 @@ app.get("/api/social/connections/options", (req, res) => {
         },
     });
 });
+// GET Facebook OAuth URL - public endpoint to generate authorization link
 app.get("/api/social/oauth/facebook/url", (req, res) => {
     const appId = process.env.FACEBOOK_APP_ID;
     const redirectUri = req.query.redirect_uri || process.env.FACEBOOK_REDIRECT_URI;
+    // Require app credentials
     if (!appId || !redirectUri) {
         res.status(503).json({
             error: "Set FACEBOOK_APP_ID and FACEBOOK_REDIRECT_URI (or pass redirect_uri).",
@@ -140,11 +151,12 @@ app.get("/api/social/oauth/facebook/url", (req, res) => {
     });
     res.json({ url, state });
 });
+// GET Facebook posts - fetch from official API or demo source
 app.get("/api/social/facebook/posts", async (req, res) => {
     try {
         const pageId = req.query.page_id;
         const token = req.query.access_token;
-        // If credentials provided, try official API; otherwise use JSONPlaceholder
+        // Use real credentials if provided, otherwise fallback to demo
         if (pageId && token) {
             const result = await fetchFacebookPagePosts({
                 pageId,
@@ -157,7 +169,7 @@ app.get("/api/social/facebook/posts", async (req, res) => {
             res.json({ posts: result.posts, demo: false });
         }
         else {
-            // Always call fetch function for demo (uses JSONPlaceholder)
+            // Call fetch function to get demo data from JSONPlaceholder
             const result = await fetchFacebookPagePosts({
                 pageId: "demo",
                 accessToken: "demo_token",
@@ -172,11 +184,12 @@ app.get("/api/social/facebook/posts", async (req, res) => {
             .json({ error: "Failed to fetch Facebook posts.", posts: [] });
     }
 });
+// GET Instagram media - fetch from official API or demo source
 app.get("/api/social/instagram/media", async (req, res) => {
     try {
         const igUserId = req.query.ig_user_id;
         const token = req.query.access_token;
-        // If credentials provided, try official API; otherwise use Ayrshare
+        // Use real credentials if provided, otherwise fallback to demo
         if (igUserId && token) {
             const result = await fetchInstagramMedia({
                 igUserId,
@@ -189,7 +202,7 @@ app.get("/api/social/instagram/media", async (req, res) => {
             res.json({ posts: result.posts, demo: false });
         }
         else {
-            // Always call fetch function for demo (uses Ayrshare)
+            // Call fetch function to get demo data from JSONPlaceholder
             const result = await fetchInstagramMedia({
                 igUserId: "demo",
                 accessToken: "demo_token",
@@ -204,6 +217,7 @@ app.get("/api/social/instagram/media", async (req, res) => {
             .json({ error: "Failed to fetch Instagram media.", posts: [] });
     }
 });
+// POST convert single social post to product draft
 app.post("/api/social/import/convert", (req, res) => {
     const post = req.body?.post;
     if (!post?.id || !post.platform) {
@@ -213,12 +227,14 @@ app.post("/api/social/import/convert", (req, res) => {
     const draft = postToProductDraft(post);
     res.json({ draft });
 });
+// POST convert multiple social posts to product drafts
 app.post("/api/social/import/convert-many", (req, res) => {
     const posts = req.body?.posts;
     if (!Array.isArray(posts)) {
         res.status(400).json({ error: "Expected body.posts as an array." });
         return;
     }
+    // Filter to valid posts only
     const validPosts = posts.filter((p) => p?.id && (p?.platform === "facebook" || p?.platform === "instagram"));
     const drafts = validPosts.map(postToProductDraft);
     res.json({
@@ -227,20 +243,24 @@ app.post("/api/social/import/convert-many", (req, res) => {
         rejected: posts.length - drafts.length,
     });
 });
+// GET all social posts from Facebook and/or Instagram with optional filtering
 app.get("/api/social/import/all", async (req, res) => {
     try {
         const pageId = req.query.page_id;
         const fbToken = req.query.fb_access_token;
         const igUserId = req.query.ig_user_id;
         const igToken = req.query.ig_access_token;
+        // Allow opt-out of each platform (default: include both)
         const includeFacebook = req.query.include_facebook !== "false";
         const includeInstagram = req.query.include_instagram !== "false";
         let facebookPosts = [];
         let instagramPosts = [];
         let facebookDemo = false;
         let instagramDemo = false;
+        // Fetch Facebook posts if enabled
         if (includeFacebook) {
             if (!pageId || !fbToken) {
+                // Use demo posts if no credentials
                 facebookPosts = demoPosts.filter((p) => p.platform === "facebook");
                 facebookDemo = true;
             }
@@ -256,8 +276,10 @@ app.get("/api/social/import/all", async (req, res) => {
                 facebookPosts = result.posts;
             }
         }
+        // Fetch Instagram posts if enabled
         if (includeInstagram) {
             if (!igUserId || !igToken) {
+                // Use demo posts if no credentials
                 instagramPosts = demoPosts.filter((p) => p.platform === "instagram");
                 instagramDemo = true;
             }
@@ -273,6 +295,7 @@ app.get("/api/social/import/all", async (req, res) => {
                 instagramPosts = result.posts;
             }
         }
+        // Combine and sort by date (most recent first)
         const posts = [...facebookPosts, ...instagramPosts].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         res.json({
             posts,
@@ -291,9 +314,11 @@ app.get("/api/social/import/all", async (req, res) => {
         res.status(500).json({ error: "Failed to import posts." });
     }
 });
+// Health check endpoint
 app.get("/health", (_req, res) => {
     res.json({ ok: true, feature: "social-integration" });
 });
+// Redirect root to demo page
 app.get("/", (_req, res) => {
     res.redirect("/demo.html");
 });
