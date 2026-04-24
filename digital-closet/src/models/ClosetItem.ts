@@ -32,3 +32,4 @@ const closetItemSchema = new mongoose.Schema(
 export type ClosetItemDoc = mongoose.InferSchemaType<typeof closetItemSchema>;
 export const ClosetItemModel =
   mongoose.models.ClosetItem || mongoose.model("ClosetItem", closetItemSchema);
+
