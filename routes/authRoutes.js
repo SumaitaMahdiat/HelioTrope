@@ -39,60 +39,14 @@ router.post("/register", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(error);
+    // error logged by morgan
     res.status(500).json({ message: "Server error" });
   }
 });
 
 // Login
 router.post("/login", async (req, res) => {
-  // DummyJSON Demo Login (new endpoint)
-  if (req.query.demo === "true") {
-    try {
-      const { email, password } = req.body;
-      if (!email || !password) {
-        return res
-          .status(400)
-          .json({ message: "Email and password are required" });
-      }
-
-      const response = await fetch("https://dummyjson.com/auth/users/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await response.json();
-
-      if (!response.ok || data.token == null) {
-        return res.status(401).json({ message: "Invalid demo credentials" });
-      }
-
-      // Map dummyjson user to app format (fake ID, default role)
-      const fakeId = `dummy_${data.id}`;
-      const appUser = {
-        id: fakeId,
-        email: data.email || email,
-        name: data.firstName + " " + data.lastName,
-        role: "buyer", // Default for demo
-      };
-
-      // Generate app JWT
-      const token = jwt.sign(
-        { id: fakeId, role: appUser.role },
-        process.env.JWT_SECRET,
-        { expiresIn: "7d" },
-      );
-
-      res.json({
-        token,
-        user: appUser,
-      });
-    } catch (error) {
-      console.error("DummyJSON error:", error);
-      res.status(500).json({ message: "Demo login failed" });
-    }
-    return;
-  }
+  // Regular login flow
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -122,7 +76,7 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(error);
+    // error logged by morgan
     res.status(500).json({ message: "Server error" });
   }
 });
