@@ -1,17 +1,18 @@
 const DUMMYJSON = "https://dummyjson.com";
-
 export interface FetchFacebookPostsOptions {
   pageId: string;
   accessToken: string;
   limit?: number;
 }
 
+// Fetch Facebook page posts from demo source and transform to SocialPost format
 export async function fetchFacebookPagePosts(
   options: FetchFacebookPostsOptions,
 ): Promise<{ posts: import("./types.js").SocialPost[]; error?: string }> {
   const { limit = 25 } = options;
 
   try {
+    // Fetch posts, users, and products in parallel from demo API
     const [postsRes, usersRes, productsRes] = await Promise.all([
       fetch(`${DUMMYJSON}/posts?limit=${limit}`),
       fetch(`${DUMMYJSON}/users?limit=${limit}`),
@@ -34,6 +35,7 @@ export async function fetchFacebookPagePosts(
       { products: Array<{ id: number; title: string; thumbnail: string }> },
     ];
 
+    // Map demo data to SocialPost format
     const posts: import("./types.js").SocialPost[] = postsData.posts.map(
       (post, idx) => {
         const user = usersData.users[idx % usersData.users.length];
@@ -42,6 +44,7 @@ export async function fetchFacebookPagePosts(
         return {
           id: `fb_${post.id}`,
           platform: "facebook" as const,
+          // Combine user name and post content, truncate to 280 chars
           caption:
             `${user.firstName} ${user.lastName}: ${post.title} — ${post.body}`.slice(
               0,
@@ -49,6 +52,7 @@ export async function fetchFacebookPagePosts(
             ),
           mediaUrl: product.thumbnail || null,
           permalink: `https://facebook.com/demo/post/${post.id}`,
+          // Simulate different post times (1 hour apart)
           createdAt: new Date(Date.now() - idx * 3600000).toISOString(),
           raw: post,
         };
@@ -64,6 +68,7 @@ export async function fetchFacebookPagePosts(
   }
 }
 
+// Build Facebook OAuth authorization URL for app flow
 export function facebookOAuthAuthorizeUrl(params: {
   appId: string;
   redirectUri: string;

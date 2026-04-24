@@ -5,13 +5,13 @@ export interface SocialPost {
   mediaUrl: string | null;
   permalink: string | null;
   createdAt: string;
-  raw?: Record<string, unknown>;
+  raw?: Record<string, unknown>; // Original API response
 }
 
 export interface ProductDraftFromPost {
   title: string;
   description: string;
-  sourcePostId: string;
+  sourcePostId: string; // Reference to original social post
   platform: SocialPost["platform"];
   suggestedPrice?: number;
   imageUrls: string[];

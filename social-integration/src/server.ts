@@ -1,3 +1,4 @@
+// Environment and dependencies
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
@@ -21,9 +22,10 @@ app.use(express.static(path.join(__dirname, "..", "public")));
 
 const PORT = Number(process.env.PORT) || 3003;
 type UserRole = "buyer" | "seller";
+// In-memory session store (token -> user info)
 const sessions = new Map<string, { role: UserRole; displayName: string }>();
 
-/** In-memory demo store when APIs are not called */
+// Demo posts for testing without real API credentials
 const demoPosts: SocialPost[] = [
   {
     id: "demo_fb_1",
@@ -43,6 +45,7 @@ const demoPosts: SocialPost[] = [
   },
 ];
 
+// Extract session token from Authorization header or custom header
 function readSessionToken(req: express.Request) {
   const bearer = req.headers.authorization?.startsWith("Bearer ")
     ? req.headers.authorization.slice("Bearer ".length).trim()
@@ -53,6 +56,7 @@ function readSessionToken(req: express.Request) {
   return bearer || headerToken || null;
 }
 
+// Validate session and return user info, or send 401 response
 function requireSession(req: express.Request, res: express.Response) {
   const token = readSessionToken(req);
   if (!token) {
@@ -67,15 +71,18 @@ function requireSession(req: express.Request, res: express.Response) {
   return { token, session };
 }
 
+// POST login - create a session for buyer or seller
 app.post("/api/auth/login", (req, res) => {
   const role = req.body?.role as UserRole | undefined;
   const displayNameRaw = req.body?.displayName as string | undefined;
   const displayName = displayNameRaw?.trim() || "Demo User";
+  // Validate role
   if (role !== "buyer" && role !== "seller") {
     res.status(400).json({ error: "role must be 'buyer' or 'seller'." });
     return;
   }
 
+  // Generate session token and store user info
   const token = randomUUID();
   sessions.set(token, { role, displayName });
   res.json({
@@ -88,11 +95,13 @@ app.post("/api/auth/login", (req, res) => {
   });
 });
 
+// GET connection options - show available OAuth flows (sellers only)
 app.get("/api/social/connections/options", (req, res) => {
   const auth = requireSession(req, res);
   if (!auth) return;
 
   const { session } = auth;
+  // Restrict to sellers
   if (session.role !== "seller") {
     res.json({
       role: session.role,
@@ -107,6 +116,7 @@ app.get("/api/social/connections/options", (req, res) => {
   const redirectUri = process.env.FACEBOOK_REDIRECT_URI;
   const canGenerateOAuth = Boolean(appId && redirectUri);
   const oauthState = randomUUID();
+  // Generate Facebook OAuth URL if configured
   const facebookOauthUrl = canGenerateOAuth
     ? facebookOAuthAuthorizeUrl({
         appId: String(appId),
@@ -141,10 +151,12 @@ app.get("/api/social/connections/options", (req, res) => {
   });
 });
 
+// GET Facebook OAuth URL - public endpoint to generate authorization link
 app.get("/api/social/oauth/facebook/url", (req, res) => {
   const appId = process.env.FACEBOOK_APP_ID;
   const redirectUri =
     (req.query.redirect_uri as string) || process.env.FACEBOOK_REDIRECT_URI;
+  // Require app credentials
   if (!appId || !redirectUri) {
     res.status(503).json({
       error:
@@ -162,12 +174,13 @@ app.get("/api/social/oauth/facebook/url", (req, res) => {
   res.json({ url, state });
 });
 
+// GET Facebook posts - fetch from official API or demo source
 app.get("/api/social/facebook/posts", async (req, res) => {
   try {
     const pageId = req.query.page_id as string | undefined;
     const token = req.query.access_token as string | undefined;
 
-    // If credentials provided, try official API; otherwise use JSONPlaceholder
+    // Use real credentials if provided, otherwise fallback to demo
     if (pageId && token) {
       const result = await fetchFacebookPagePosts({
         pageId,
@@ -179,7 +192,7 @@ app.get("/api/social/facebook/posts", async (req, res) => {
       }
       res.json({ posts: result.posts, demo: false });
     } else {
-      // Always call fetch function for demo (uses JSONPlaceholder)
+      // Call fetch function to get demo data from JSONPlaceholder
       const result = await fetchFacebookPagePosts({
         pageId: "demo",
         accessToken: "demo_token",
@@ -194,12 +207,13 @@ app.get("/api/social/facebook/posts", async (req, res) => {
   }
 });
 
+// GET Instagram media - fetch from official API or demo source
 app.get("/api/social/instagram/media", async (req, res) => {
   try {
     const igUserId = req.query.ig_user_id as string | undefined;
     const token = req.query.access_token as string | undefined;
 
-    // If credentials provided, try official API; otherwise use Ayrshare
+    // Use real credentials if provided, otherwise fallback to demo
     if (igUserId && token) {
       const result = await fetchInstagramMedia({
         igUserId,
@@ -211,7 +225,7 @@ app.get("/api/social/instagram/media", async (req, res) => {
       }
       res.json({ posts: result.posts, demo: false });
     } else {
-      // Always call fetch function for demo (uses Ayrshare)
+      // Call fetch function to get demo data from JSONPlaceholder
       const result = await fetchInstagramMedia({
         igUserId: "demo",
         accessToken: "demo_token",
@@ -226,6 +240,7 @@ app.get("/api/social/instagram/media", async (req, res) => {
   }
 });
 
+// POST convert single social post to product draft
 app.post("/api/social/import/convert", (req, res) => {
   const post = req.body?.post as SocialPost | undefined;
   if (!post?.id || !post.platform) {
@@ -236,12 +251,14 @@ app.post("/api/social/import/convert", (req, res) => {
   res.json({ draft });
 });
 
+// POST convert multiple social posts to product drafts
 app.post("/api/social/import/convert-many", (req, res) => {
   const posts = req.body?.posts as SocialPost[] | undefined;
   if (!Array.isArray(posts)) {
     res.status(400).json({ error: "Expected body.posts as an array." });
     return;
   }
+  // Filter to valid posts only
   const validPosts = posts.filter(
     (p) => p?.id && (p?.platform === "facebook" || p?.platform === "instagram"),
   );
@@ -253,6 +270,7 @@ app.post("/api/social/import/convert-many", (req, res) => {
   });
 });
 
+// GET all social posts from Facebook and/or Instagram with optional filtering
 app.get("/api/social/import/all", async (req, res) => {
   try {
     const pageId = req.query.page_id as string | undefined;
@@ -260,6 +278,7 @@ app.get("/api/social/import/all", async (req, res) => {
     const igUserId = req.query.ig_user_id as string | undefined;
     const igToken = req.query.ig_access_token as string | undefined;
 
+    // Allow opt-out of each platform (default: include both)
     const includeFacebook = req.query.include_facebook !== "false";
     const includeInstagram = req.query.include_instagram !== "false";
 
@@ -268,8 +287,10 @@ app.get("/api/social/import/all", async (req, res) => {
     let facebookDemo = false;
     let instagramDemo = false;
 
+    // Fetch Facebook posts if enabled
     if (includeFacebook) {
       if (!pageId || !fbToken) {
+        // Use demo posts if no credentials
         facebookPosts = demoPosts.filter((p) => p.platform === "facebook");
         facebookDemo = true;
       } else {
@@ -285,8 +306,10 @@ app.get("/api/social/import/all", async (req, res) => {
       }
     }
 
+    // Fetch Instagram posts if enabled
     if (includeInstagram) {
       if (!igUserId || !igToken) {
+        // Use demo posts if no credentials
         instagramPosts = demoPosts.filter((p) => p.platform === "instagram");
         instagramDemo = true;
       } else {
@@ -302,6 +325,7 @@ app.get("/api/social/import/all", async (req, res) => {
       }
     }
 
+    // Combine and sort by date (most recent first)
     const posts = [...facebookPosts, ...instagramPosts].sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -323,10 +347,12 @@ app.get("/api/social/import/all", async (req, res) => {
   }
 });
 
+// Health check endpoint
 app.get("/health", (_req, res) => {
   res.json({ ok: true, feature: "social-integration" });
 });
 
+// Redirect root to demo page
 app.get("/", (_req, res) => {
   res.redirect("/demo.html");
 });
