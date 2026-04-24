@@ -12,6 +12,7 @@ const SignIn: React.FC = () => {
   const { login, user } = useAuth();
   const navigate = useNavigate();
 
+  // Redirect to role-specific page if already logged in
   React.useEffect(() => {
     if (user) {
       if (user.role === "buyer") {
@@ -24,6 +25,7 @@ const SignIn: React.FC = () => {
     }
   }, [user, navigate]);
 
+  // Handle login form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -47,6 +49,7 @@ const SignIn: React.FC = () => {
 
   return (
     <div className="min-h-screen p-4 sm:p-6 flex items-center justify-center relative overflow-hidden">
+      {/* Animated background blobs */}
       <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-pink-200/40 blur-3xl" />
       <div className="absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-purple-200/30 blur-3xl" />
 
@@ -56,6 +59,7 @@ const SignIn: React.FC = () => {
         transition={{ duration: 0.45, ease: "easeOut" }}
         className="glass w-full max-w-md p-8 sm:p-10 relative z-10"
       >
+        {/* Form header */}
         <div className="mb-8 text-center">
           <p className="text-xs uppercase tracking-[0.3em] text-(--primary) font-semibold mb-3">
             HelioTrope
@@ -66,6 +70,7 @@ const SignIn: React.FC = () => {
           </p>
         </div>
 
+        {/* Login form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -95,12 +100,14 @@ const SignIn: React.FC = () => {
             />
           </div>
 
+          {/* Error message */}
           {error && (
             <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
             </p>
           )}
 
+          {/* Submit button */}
           <button
             type="submit"
             disabled={loading}
@@ -110,6 +117,7 @@ const SignIn: React.FC = () => {
           </button>
         </form>
 
+        {/* Link to signup */}
         <p className="text-center mt-7 text-sm text-gray-600">
           Don&apos;t have an account?{" "}
           <Link

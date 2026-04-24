@@ -14,12 +14,14 @@ const SignUp: React.FC = () => {
   const { register } = useAuth();
   const navigate = useNavigate();
 
+  // Handle registration form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
     try {
       await register(email, password, role, name);
+      // Redirect based on selected role
       if (role === "buyer") {
         navigate("/closet");
       } else if (role === "seller") {
@@ -43,6 +45,7 @@ const SignUp: React.FC = () => {
 
   return (
     <div className="min-h-screen p-4 sm:p-6 flex items-center justify-center relative overflow-hidden">
+      {/* Animated background blobs */}
       <div className="absolute -top-28 -right-20 h-80 w-80 rounded-full bg-rose-200/40 blur-3xl" />
       <div className="absolute -bottom-24 -left-20 h-72 w-72 rounded-full bg-violet-200/30 blur-3xl" />
 
@@ -52,6 +55,7 @@ const SignUp: React.FC = () => {
         transition={{ duration: 0.45, ease: "easeOut" }}
         className="glass w-full max-w-xl p-8 sm:p-10 relative z-10"
       >
+        {/* Form header */}
         <div className="mb-8 text-center">
           <p className="text-xs uppercase tracking-[0.3em] text-(--primary) font-semibold mb-3">
             HelioTrope
@@ -63,8 +67,10 @@ const SignUp: React.FC = () => {
           </p>
         </div>
 
+        {/* Registration form */}
         <form onSubmit={handleSubmit} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Name field */}
             <div className="sm:col-span-2">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Name
@@ -79,6 +85,7 @@ const SignUp: React.FC = () => {
               />
             </div>
 
+            {/* Email field */}
             <div className="sm:col-span-2">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Email
@@ -93,6 +100,7 @@ const SignUp: React.FC = () => {
               />
             </div>
 
+            {/* Password field */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Password
@@ -107,6 +115,7 @@ const SignUp: React.FC = () => {
               />
             </div>
 
+            {/* Role selector */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Role
@@ -123,12 +132,14 @@ const SignUp: React.FC = () => {
             </div>
           </div>
 
+          {/* Error message */}
           {error && (
             <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
             </p>
           )}
 
+          {/* Submit button */}
           <button
             type="submit"
             disabled={loading}
@@ -138,6 +149,7 @@ const SignUp: React.FC = () => {
           </button>
         </form>
 
+        {/* Link to signin */}
         <p className="text-center mt-7 text-sm text-gray-600">
           Already have an account?{" "}
           <Link

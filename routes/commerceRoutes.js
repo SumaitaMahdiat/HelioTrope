@@ -15,6 +15,62 @@ const MAX_IMAGE_BYTES = Number(
   process.env.AI_VISION_MAX_IMAGE_BYTES || 2_000_000,
 );
 const DUMMYJSON_URL = "https://dummyjson.com";
+
+const dummyJsonCache = new Map();
+
+async function fetchDummyJsonProducts({ category, q, limit = 24, skip = 0 }) {
+  const cacheKey = JSON.stringify({ category, q, limit, skip });
+  if (dummyJsonCache.has(cacheKey)) {
+    return dummyJsonCache.get(cacheKey);
+  }
+
+  const searchParams = new URLSearchParams();
+  if (q) searchParams.set("q", q);
+  searchParams.set("limit", limit.toString());
+  searchParams.set("skip", skip.toString());
+
+  let url;
+  if (category) {
+    url = `${DUMMYJSON_URL}/products/category/${category}?${searchParams}`;
+  } else if (q) {
+    url = `${DUMMYJSON_URL}/products/search?${searchParams}`;
+  } else {
+    url = `${DUMMYJSON_URL}/products?${searchParams}`;
+  }
+
+  const response = await fetch(url);
+  const data = await response.json();
+
+  let products = data.products || [];
+
+  // Food filtering: if category=groceries, include; else exclude groceries
+  if (category !== "groceries") {
+    products = products.filter((p) => p.category !== "groceries");
+  }
+
+  const mapped = products
+    .map((p) => ({
+      _id: `dummy_${p.id}`,
+      id: `dummy_${p.id}`,
+      name: p.title,
+      type: "clothes",
+      colors: [],
+      brand: p.brand || null,
+      occasions: [],
+      imageUrl: p.images?.[0] || p.thumbnail,
+      notes: p.description,
+      userId: "dummyjson",
+      sellerName: "DummyJSON Marketplace",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }))
+    .map(toPublicProduct); // Reuse existing mapper
+
+  dummyJsonCache.set(cacheKey, mapped);
+  setTimeout(() => dummyJsonCache.delete(cacheKey), 5 * 60 * 1000); // 5min TTL
+
+  return mapped;
+}
 const demoCartStore = new Map();
 const VALID_OCCASIONS = new Set([
   "casual",
@@ -33,6 +89,21 @@ function buildFashionSystemPrompt(closet = [], context = {}) {
     "Give practical, respectful styling advice. Reference local occasions (eid, weddings, Pohela Boishakh) when relevant. " +
     "If a digital closet is provided, prefer suggesting combinations using those items by name; say what is missing if the user asks for a full look and something is not in the closet. " +
     "Keep answers concise unless the user asks for detail.";
+
+  base +=
+    "\n\nOutput format must be exactly this structure:" +
+    "\nPrimary Look: <one short paragraph>" +
+    "\nAlternative Look: <one short paragraph>" +
+    "\nAccessories and Footwear: <one short paragraph>" +
+    "\nNotes: <one short paragraph>.";
+
+  base +=
+    "\n\nHard styling rules:" +
+    "\n- Use exactly one base outfit per look." +
+    "\n- A base outfit is either one full-piece garment (dress/abaya/gown/jumpsuit) OR a top+bottom/set." +
+    "\n- Never combine two base outfits in the same look (example: do not pair a dress with another full set)." +
+    "\n- If another base garment is relevant, place it only in Alternative Look." +
+    "\n- Do not invent item IDs. If an ID is unknown, omit it.";
 
   if (context.city) base += ` User city hint: ${context.city}.`;
   if (context.season) base += ` Season: ${context.season}.`;
@@ -65,14 +136,26 @@ function toOpenRouterMessages(messages, closetImages = []) {
     }));
 
   if (closetImages.length) {
-    const imageList = closetImages
-      .map((image) => `${image.name} (id:${image.itemId})`)
-      .join(", ");
+    const textSummary =
+      "Closet images were provided for context. Use these visuals to infer colors, fabrics, and style formality before suggesting outfits. Item references: " +
+      closetImages
+        .map((image) => `${image.name} (id:${image.itemId})`)
+        .join(", ");
+    const content = [
+      {
+        type: "text",
+        text: textSummary,
+      },
+      ...closetImages.map((image) => ({
+        type: "image_url",
+        image_url: {
+          url: `data:${image.mimeType};base64,${image.dataBase64}`,
+        },
+      })),
+    ];
     conversation.push({
       role: "user",
-      content:
-        "Closet images were provided for context. Treat these items as visually confirmed: " +
-        imageList,
+      content,
     });
   }
   return conversation;
@@ -109,6 +192,21 @@ function buildSuggestionFallbackReply(
     .join(" ");
 }
 
+function buildRateLimitFallbackReply(messages) {
+  const lastUser =
+    [...messages]
+      .reverse()
+      .find((m) => m?.role === "user" && typeof m.content === "string")
+      ?.content || "";
+
+  return {
+    assistant:
+      lastUser ||
+      "I’m rate-limited right now, but I can still help you style this item by combining it with neutral basics and one accent piece.",
+    model: "fallback",
+  };
+}
+
 async function runGeminiText({
   messages,
   closet = [],
@@ -124,45 +222,64 @@ async function runGeminiText({
     };
   }
 
-  const model =
+  const defaultModel =
     process.env.OPENROUTER_MODEL || "meta-llama/llama-3.1-8b-instruct";
-  const response = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
+  const visionModel = process.env.OPENROUTER_VISION_MODEL || defaultModel;
+
+  const buildBody = (modelName, includeImages) => ({
+    model: modelName,
+    messages: [
+      {
+        role: "system",
+        content: buildFashionSystemPrompt(closet, context),
+      },
+      ...toOpenRouterMessages(messages, includeImages ? closetImages : []),
+    ],
+    temperature: 0.75,
+    max_tokens: 600,
+  });
+
+  const runCompletion = (body) =>
+    fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: buildFashionSystemPrompt(closet, context),
-          },
-          ...toOpenRouterMessages(messages, closetImages),
-        ],
-        temperature: 0.75,
-        max_tokens: 600,
-      }),
-    },
-  );
+      body: JSON.stringify(body),
+    });
+
+  let usedVisionInput = Boolean(closetImages?.length);
+  let model = usedVisionInput ? visionModel : defaultModel;
+  let response = await runCompletion(buildBody(model, usedVisionInput));
+
+  if (!response.ok && usedVisionInput) {
+    const errBody = await response.text().catch(() => "");
+    const imageNotSupported =
+      response.status === 404 &&
+      /no endpoints found that support image input|support image input/i.test(
+        errBody,
+      );
+
+    if (imageNotSupported) {
+      usedVisionInput = false;
+      model = defaultModel;
+      response = await runCompletion(buildBody(model, false));
+    } else {
+      if (response.status === 429) {
+        return buildRateLimitFallbackReply(messages);
+      }
+
+      throw new Error(
+        `OpenRouter API error (${response.status}): ${errBody || "request failed"}`,
+      );
+    }
+  }
 
   if (!response.ok) {
     const errBody = await response.text().catch(() => "");
     if (response.status === 429) {
-      const lastUser =
-        [...messages]
-          .reverse()
-          .find((m) => m?.role === "user" && typeof m.content === "string")
-          ?.content || "";
-      return {
-        assistant:
-          lastUser ||
-          "I’m rate-limited right now, but I can still help you style this item by combining it with neutral basics and one accent piece.",
-        model: "fallback",
-      };
+      return buildRateLimitFallbackReply(messages);
     }
 
     throw new Error(
@@ -508,26 +625,34 @@ router.get("/products", async (req, res) => {
     const page = Math.max(Number(req.query.page) || 1, 1);
     const skip = (page - 1) * limit;
     const type = req.query.type ? String(req.query.type) : null;
+    const category = req.query.category
+      ? String(req.query.category).toLowerCase().trim()
+      : null;
     const q = req.query.q ? String(req.query.q).trim() : "";
 
-    const filter = { userId: { $ne: req.user.id } };
-    if (type) filter.type = type;
+    // Seller products filter (existing)
+    const sellerFilter = { userId: { $ne: req.user.id } };
+    if (type) sellerFilter.type = type;
     if (q) {
-      filter.$or = [
+      sellerFilter.$or = [
         { name: { $regex: q, $options: "i" } },
         { brand: { $regex: q, $options: "i" } },
         { notes: { $regex: q, $options: "i" } },
       ];
     }
 
-    const products = await ClosetItemModel.find(filter)
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    // Fetch seller + DummyJSON in parallel
+    const [sellerDocs, dummyProds] = await Promise.all([
+      ClosetItemModel.find(sellerFilter)
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      fetchDummyJsonProducts({ category, q, limit, skip }),
+    ]);
 
     const sellerIds = Array.from(
-      new Set(products.map((p) => String(p.userId))),
+      new Set(sellerDocs.map((p) => String(p.userId))),
     );
     const sellers = sellerIds.length
       ? await UserModel.find({ _id: { $in: sellerIds } })
@@ -536,12 +661,17 @@ router.get("/products", async (req, res) => {
       : [];
     const sellerMap = new Map(sellers.map((s) => [String(s._id), s.name]));
 
+    const sellerProds = sellerDocs.map((p) => toPublicProduct(p, sellerMap));
+
+    // Merge seller first, then DummyJSON
+    const allProducts = [...sellerProds, ...dummyProds];
+
     res.json({
-      products: products.map((p) => toPublicProduct(p, sellerMap)),
+      products: allProducts.slice(0, limit), // Ensure total limit
       pagination: {
         page,
         limit,
-        hasMore: products.length === limit,
+        hasMore: allProducts.length === limit || dummyProds.length === limit,
       },
     });
   } catch (error) {
@@ -556,7 +686,8 @@ router.get("/cart", async (req, res) => {
       return;
     }
     const snapshot = await getBuyerCartSnapshot(req.user.id);
-    res.setHeader("Cache-Control", "public, max-age=30");
+    // Cart must always reflect latest mutations (add/remove/checkout).
+    res.setHeader("Cache-Control", "no-store");
     res.json(snapshot);
   } catch (error) {
     res.status(500).json({ error: "Failed to load cart." });
@@ -797,6 +928,17 @@ router.post("/products/:productId/suggestions", async (req, res) => {
       notes: selected.notes,
     };
 
+    const selectedCategory = toOutfitCategory(selected);
+    const sameCategoryCloset = selectedCategory
+      ? userCloset.filter((item) => toOutfitCategory(item) === selectedCategory)
+      : [];
+    const sameCategoryShop = selectedCategory
+      ? shopOptions.filter(
+          (item) => toOutfitCategory(item) === selectedCategory,
+        )
+      : shopOptions;
+    const hasClosetMatches = sameCategoryCloset.length > 0;
+
     const allVisionCandidates = [
       selectedAsCloset,
       ...userCloset,
@@ -822,11 +964,6 @@ router.post("/products/:productId/suggestions", async (req, res) => {
         })
         .filter(Boolean);
 
-    const generatorCloset = toOutfitItems([
-      selectedAsCloset,
-      ...userCloset,
-      ...shopOptions,
-    ]);
     const occasion = req.body?.occasion ? String(req.body.occasion) : undefined;
     const style = req.body?.style === "clueless" ? "clueless" : "classic";
 
@@ -851,12 +988,12 @@ router.post("/products/:productId/suggestions", async (req, res) => {
     const suggestionMessages = [
       {
         role: "user",
-        content: `Suggest how to style this product for ${occasion || "a general day"}: ${selected.name}. Prioritize my digital closet items first, then suggest extra pieces from shop options. Style mode: ${style === "clueless" ? "Clueless-inspired polished coordination" : "classic balanced styling"}.`,
+        content: `Suggest how to style this product for ${occasion || "a general day"}: ${selected.name}. Keep this selected product as the anchor of Primary Look. If you mention another base garment, move it to Alternative Look instead of combining them. Prefer same-category suggestions. If I have matching category items in my closet, include them first and then add marketplace recs from the same category; otherwise use marketplace recs only. Style mode: ${style === "clueless" ? "Clueless-inspired polished coordination" : "classic balanced styling"}.`,
       },
     ];
     const assistantData = await runGeminiText({
       messages: suggestionMessages,
-      closet: [selectedAsCloset, ...userCloset].map((item) => ({
+      closet: [selectedAsCloset, ...sameCategoryCloset].map((item) => ({
         id: String(item._id),
         name: item.name,
         category: item.type,
@@ -881,9 +1018,15 @@ router.post("/products/:productId/suggestions", async (req, res) => {
       outfits: outfitData?.outfits || [],
       bestOutfit: outfitData?.best || null,
       ai: outfitData?.ai || null,
+      relatedClosetProducts: hasClosetMatches
+        ? sameCategoryCloset.map((item) => toPublicProduct(item))
+        : [],
+      relatedMarketplaceProducts: sameCategoryShop.map((item) =>
+        toPublicProduct(item),
+      ),
       source: {
-        closetCount: userCloset.length,
-        shopCount: shopOptions.length,
+        closetCount: sameCategoryCloset.length,
+        shopCount: sameCategoryShop.length,
       },
     });
   } catch (error) {

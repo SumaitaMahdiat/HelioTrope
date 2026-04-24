@@ -19,6 +19,20 @@ const userSchema = new mongoose.Schema(
       igUserId: { type: String },
       igAccessToken: { type: String, select: false },
     },
+    cart: [
+      {
+        productId: { type: String, required: true },
+        quantity: { type: Number, default: 1, min: 1 },
+        addedAt: { type: Date, default: Date.now },
+      },
+    ],
+    purchaseHistory: [
+      {
+        productId: { type: String, required: true },
+        quantity: { type: Number, default: 1, min: 1 },
+        purchasedAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true },
 );

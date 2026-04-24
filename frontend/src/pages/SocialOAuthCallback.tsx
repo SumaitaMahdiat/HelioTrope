@@ -3,6 +3,7 @@ import type { FC } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
+import { API_ORIGIN } from "../api";
 
 const SocialOAuthCallback: FC = () => {
   const [searchParams] = useSearchParams();
@@ -10,6 +11,8 @@ const SocialOAuthCallback: FC = () => {
   const { user, loading } = useAuth();
   const [status, setStatus] = useState("Finishing social connection...");
   const [error, setError] = useState("");
+
+  // Validate prerequisites for OAuth callback
   const validationError =
     !loading && (!user || user.role !== "seller")
       ? "Please sign in as a seller before connecting social pages."
@@ -42,10 +45,11 @@ const SocialOAuthCallback: FC = () => {
 
     let active = true;
 
+    // Complete OAuth flow by exchanging code for access token
     const finishConnection = async () => {
       try {
         const response = await axios.get(
-          "http://localhost:5001/api/social/oauth/facebook/callback",
+          `${API_ORIGIN}/api/social/oauth/facebook/callback`,
           {
             params: { code, state },
             headers: {
@@ -58,6 +62,7 @@ const SocialOAuthCallback: FC = () => {
           return;
         }
 
+        // Check if Instagram account was also connected
         const igUserId = response.data?.igUserId;
         setStatus(
           igUserId
@@ -65,6 +70,7 @@ const SocialOAuthCallback: FC = () => {
             : "Facebook page connected successfully.",
         );
 
+        // Redirect back to social tools after brief delay
         setTimeout(() => {
           if (active) {
             navigate("/seller/social");
@@ -88,6 +94,7 @@ const SocialOAuthCallback: FC = () => {
 
     void finishConnection();
 
+    // Cleanup function to prevent state updates on unmounted component
     return () => {
       active = false;
     };
@@ -100,6 +107,7 @@ const SocialOAuthCallback: FC = () => {
           Social Connect
         </p>
         <h1 className="text-3xl font-bold text-gray-900">Connecting pages</h1>
+        {/* Display error, validation error, or status message */}
         <p className="mt-3 text-gray-600">
           {validationError || error || status}
         </p>
