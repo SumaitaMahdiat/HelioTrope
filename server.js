@@ -32,7 +32,11 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 app.use(morgan("combined"));
 app.use(cors());
 app.use(express.json());
@@ -47,7 +51,34 @@ app.get("/", (req, res) => {
   res.send("API working");
 });
 
-const port = process.env.PORT || 5001;
+const DEFAULT_PORT = 5001;
+const configuredPort = Number.parseInt(process.env.PORT || "", 10);
+const basePort = Number.isFinite(configuredPort)
+  ? configuredPort
+  : DEFAULT_PORT;
+const MAX_PORT_RETRIES = 10;
+
+function startListening(port, attempt = 0) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, "0.0.0.0", () => {
+      console.log(`Server listening on port ${port}`);
+      resolve(server);
+    });
+
+    server.on("error", (error) => {
+      if (error?.code === "EADDRINUSE" && attempt < MAX_PORT_RETRIES) {
+        const nextPort = port + 1;
+        console.warn(
+          `Port ${port} is already in use. Retrying on ${nextPort}...`,
+        );
+        resolve(startListening(nextPort, attempt + 1));
+        return;
+      }
+
+      reject(error);
+    });
+  });
+}
 
 async function startServer() {
   try {
@@ -56,9 +87,7 @@ async function startServer() {
     });
     console.log("MongoDB connected");
 
-    const server = app.listen(port, () => {
-      console.log(`Server listening on port ${port}`);
-    });
+    const server = await startListening(basePort);
 
     process.on("SIGTERM", () => {
       console.log("SIGTERM received, graceful shutdown...");
@@ -68,16 +97,8 @@ async function startServer() {
         });
       });
     });
-
-    server.on("error", (error) => {
-      if (error?.code === "EADDRINUSE") {
-        console.error(`Port ${port} is already in use.`);
-        process.exit(0);
-      }
-      throw error;
-    });
   } catch (err) {
-    console.error("MongoDB connection failed:", err.message);
+    console.error("Server startup failed:", err.message);
     process.exit(1);
   }
 }
