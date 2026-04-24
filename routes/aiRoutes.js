@@ -114,6 +114,29 @@ function buildFashionSystemPrompt(closet = [], context = {}) {
     "If a digital closet is provided, prefer suggesting combinations using those items by name; say what is missing if the user asks for a full look and something is not in the closet. " +
     "Keep answers concise unless the user asks for detail.";
 
+  base +=
+    "\n\nTone and style requirements:" +
+    "\n- Sound polished, elegant, and friendly." +
+    "\n- Use simple, clear language that feels easy to follow." +
+    "\n- Avoid slang, harsh wording, and robotic phrasing." +
+    "\n- Be encouraging and kind, but stay specific and practical." +
+    "\n- When listing options, prefer short bullets or short clean sentences.";
+
+  base +=
+    "\n\nOutput format must be exactly this structure:" +
+    "\nPrimary Look: <one short paragraph>" +
+    "\nAlternative Look: <one short paragraph>" +
+    "\nAccessories and Footwear: <one short paragraph>" +
+    "\nNotes: <one short paragraph>.";
+
+  base +=
+    "\n\nHard styling rules:" +
+    "\n- Use exactly one base outfit per look." +
+    "\n- A base outfit is either one full-piece garment (dress/abaya/gown/jumpsuit) OR a top+bottom/set." +
+    "\n- Never combine two base outfits in the same look (example: do not pair a dress with another full set)." +
+    "\n- If another base garment is relevant, place it only in Alternative Look." +
+    "\n- Do not invent item IDs. If an ID is unknown, omit it.";
+
   if (context.city) base += ` User city hint: ${context.city}.`;
   if (context.season) base += ` Season: ${context.season}.`;
 
@@ -145,14 +168,26 @@ function toOpenRouterMessages(messages, closetImages = []) {
     }));
 
   if (closetImages.length) {
-    const imageList = closetImages
-      .map((image) => `${image.name} (id:${image.itemId})`)
-      .join(", ");
+    const textSummary =
+      "Closet images were provided for context. Use these visuals to infer colors, fabrics, and formality before suggesting outfits. Item references: " +
+      closetImages
+        .map((image) => `${image.name} (id:${image.itemId})`)
+        .join(", ");
+    const content = [
+      {
+        type: "text",
+        text: textSummary,
+      },
+      ...closetImages.map((image) => ({
+        type: "image_url",
+        image_url: {
+          url: `data:${image.mimeType};base64,${image.dataBase64}`,
+        },
+      })),
+    ];
     conversation.push({
       role: "user",
-      content:
-        "Closet images were provided for context. Treat these items as visually confirmed: " +
-        imageList,
+      content,
     });
   }
   return conversation;
@@ -169,13 +204,13 @@ function buildFashionFallbackReply(messages, closet = []) {
 
   if (lastUserMessage.includes("green dress")) {
     return [
-      "For a green dress, keep the rest clean and balanced:",
-      "- Shoes: nude, beige, gold, or white",
-      "- Bag: tan, cream, or a small metallic clutch",
-      "- Jewelry: gold works best with green most of the time",
-      "- Layer: a light beige or white outer layer if you need one",
+      "Lovely choice. For a green dress, keep the look refined and balanced:",
+      "- Shoes: nude, beige, soft gold, or white",
+      "- Bag: tan, cream, or a compact metallic clutch",
+      "- Jewelry: delicate gold pieces pair beautifully with green",
+      "- Layer: a light beige or ivory outer layer if needed",
       closetNames
-        ? `If you have these closet items, I’d work them in first: ${closetNames}.`
+        ? `If you already own these items, I would style them in first: ${closetNames}.`
         : "",
     ]
       .filter(Boolean)
@@ -184,14 +219,14 @@ function buildFashionFallbackReply(messages, closet = []) {
 
   if (lastUserMessage.includes("black jeans")) {
     return (
-      "Black jeans are easiest with a white, cream, or soft-colored top. " +
-      "Add neutral shoes and one accent piece like gold jewelry or a small bag."
+      "Black jeans look most polished with a white, cream, or pastel top. " +
+      "Finish with neutral shoes and one elegant accent, such as gold jewelry or a structured mini bag."
     );
   }
 
   return (
-    "I’m temporarily rate-limited, but here’s the quick styling rule: start with the main item, match one neutral piece, " +
-    "and add one accent color or accessory. If you share the occasion and what you already own, I can narrow it down further."
+    "I’m temporarily rate-limited, but I can still guide you quickly: start with your main item, pair it with one neutral base piece, " +
+    "and finish with one refined accent color or accessory. Share your occasion and what you already own, and I’ll tailor it beautifully."
   );
 }
 
@@ -205,30 +240,68 @@ async function runFashionChatDirect(payload) {
     };
   }
 
-  const model =
+  const defaultModel =
     process.env.OPENROUTER_MODEL || "meta-llama/llama-3.1-8b-instruct";
-  const response = await fetch(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
+  const visionModel = process.env.OPENROUTER_VISION_MODEL || defaultModel;
+
+  const buildBody = (modelName, includeImages) => ({
+    model: modelName,
+    messages: [
+      {
+        role: "system",
+        content: buildFashionSystemPrompt(payload.closet, payload.context),
+      },
+      ...toOpenRouterMessages(
+        payload.messages,
+        includeImages ? payload.closetImages : [],
+      ),
+    ],
+    temperature: 0.75,
+    max_tokens: 600,
+  });
+
+  const runCompletion = (body) =>
+    fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: buildFashionSystemPrompt(payload.closet, payload.context),
-          },
-          ...toOpenRouterMessages(payload.messages, payload.closetImages),
-        ],
-        temperature: 0.75,
-        max_tokens: 600,
-      }),
-    },
-  );
+      body: JSON.stringify(body),
+    });
+
+  let usedVisionInput = Boolean(payload.closetImages?.length);
+  let model = usedVisionInput ? visionModel : defaultModel;
+  let response = await runCompletion(buildBody(model, usedVisionInput));
+
+  if (!response.ok && usedVisionInput) {
+    const errBody = await response.text().catch(() => "");
+    const imageNotSupported =
+      response.status === 404 &&
+      /no endpoints found that support image input|support image input/i.test(
+        errBody,
+      );
+
+    if (imageNotSupported) {
+      usedVisionInput = false;
+      model = defaultModel;
+      response = await runCompletion(buildBody(model, false));
+    } else {
+      if (response.status === 429) {
+        return {
+          assistant: buildFashionFallbackReply(
+            payload.messages,
+            payload.closet,
+          ),
+          model: "fallback",
+        };
+      }
+
+      throw new Error(
+        `OpenRouter API error (${response.status}): ${errBody || "request failed"}`,
+      );
+    }
+  }
 
   if (!response.ok) {
     const errBody = await response.text().catch(() => "");
