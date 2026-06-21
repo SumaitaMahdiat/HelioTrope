@@ -23,8 +23,16 @@ const closetItemSchema = new mongoose.Schema(
     occasions: [{ type: String, trim: true }],
     imageUrl: { type: String },
     notes: { type: String, trim: true },
+    // Social integration fields
+    sourcePostId: { type: String }, // Original social post ID
+    platform: {
+      type: String,
+      enum: ["facebook", "instagram"],
+    },
+    sourcePermalink: { type: String }, // Link back to original post
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
-export const ClosetItemModel = mongoose.models.ClosetItem || mongoose.model("ClosetItem", closetItemSchema);
+export const ClosetItemModel =
+  mongoose.models.ClosetItem || mongoose.model("ClosetItem", closetItemSchema);
