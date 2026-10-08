@@ -149,7 +149,7 @@ This project is currently under active development. Features and folder responsi
 
 ## License
 
-This project is currently licensed under the ISC license unless otherwise updated by the repository owner.
+No open-source license has been selected yet. Until a license is added, the repository should be treated as an educational project with all rights reserved. 
 
 ## Contributing
 
