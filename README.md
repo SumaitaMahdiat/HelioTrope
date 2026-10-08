@@ -12,6 +12,20 @@ HelioTrope brings together:
 - AI-powered shopping assistance and virtual try-on experiences
 - A modern React frontend with a scalable Node.js backend
 
+## Repository Branches
+
+This repository is not limited to a single branch. Multiple branches are part of the active project and represent different development streams or feature modules. The main repository currently includes:
+
+- main — primary project branch
+- Sumaita — a branch used for the project’s main development work
+- Mercy — another active development branch
+- Hamidi — another active development branch
+- nizhum_module1 — module-based implementation stream 1
+- nizhum_module2 — module-based implementation stream 2
+- nizhum_module3 — module-based implementation stream 3
+
+These branches should be considered part of the same project ecosystem. When working on the repo, it is important to check the relevant branch before making changes or testing features.
+
 ## Tech Stack
 
 - Frontend: React + TypeScript + Vite
@@ -32,7 +46,6 @@ HelioTrope/
 ├── server.js              # Root backend server
 ├── package.json           # Root project configuration
 ├── package-lock.json      # Lock file for dependencies
-├── .env.example           # Optional example environment file (if added locally)
 ├── README.md              # Project documentation
 └── ...
 ```
@@ -132,7 +145,7 @@ This backend is intended to support product, closet, and media management operat
 
 ## Notes
 
-This project is currently under active development. Features and folder responsibilities may evolve as the platform expands.
+This project is currently under active development. Features and folder responsibilities may evolve as the platform expands, and work may be distributed across multiple branches depending on the module or contributor.
 
 ## License
 
@@ -154,4 +167,3 @@ For questions or collaboration inquiries, please reach out through the repositor
 ---
 
 Built for a smarter, AI-powered live commerce experience.
-
